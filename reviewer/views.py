@@ -95,6 +95,8 @@ class FormExtractionView(APIView):
                 title=payload["title"],
                 source_url=payload["source_url"],
                 source_available=payload["source_available"],
+                # Save validated form categories.
+                categories=payload["categories"],
             )
             FormField.objects.bulk_create([
                 FormField(

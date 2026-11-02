@@ -14,7 +14,7 @@ class PracticeFormQueueSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PracticeForm
-        fields = ("id", "title", "source_url", "source_available", "status", "created_at", "field_count")
+        fields = ("id", "title", "source_url", "source_available", "categories", "failure_reason", "status", "created_at", "field_count")
 
 
 class PracticeFormDetailSerializer(serializers.ModelSerializer):
@@ -23,8 +23,7 @@ class PracticeFormDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PracticeForm
-        fields = ("id", "title", "source_url", "source_available", "status", "created_at", "updated_at", "fields", "decision")
-
+        fields = ("id", "title", "source_url", "source_available", "categories", "failure_reason", "status", "created_at", "updated_at", "fields", "decision")
     def get_decision(self, obj):
         try:
             decision = obj.review_decision
@@ -62,6 +61,16 @@ class ExtractionRequestSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200, trim_whitespace=True)
     source_url = serializers.URLField(max_length=2048)
     source_available = serializers.BooleanField(default=True)
+    # Optional form categories; reject blank labels.
+    categories = serializers.ListField(
+        child=serializers.CharField(
+            max_length=100,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+        default=list,
+    )
     fields = ExtractionFieldSerializer(many=True, allow_empty=False)
 
     @staticmethod
@@ -81,6 +90,15 @@ class ExtractionRequestSerializer(serializers.Serializer):
         if self._contains_answer_value(self.initial_data):
             raise serializers.ValidationError("Extraction payloads must not contain learner answers.")
         return attrs
+
+    def validate_categories(self, categories):
+        # Reject duplicate categories, ignoring letter case.
+        normalized = [category.casefold() for category in categories]
+        if len(set(normalized)) != len(normalized):
+            raise serializers.ValidationError(
+                "Categories must not contain duplicates."
+            )
+        return categories
 
     def validate_fields(self, fields):
         positions = [field["position"] for field in fields]

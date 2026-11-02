@@ -138,3 +138,86 @@ class FormReviewerApiTests(TestCase):
         self.assertEqual(answer_response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(duplicate_response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(PracticeForm.objects.filter(title__in=["Invalid import", "Duplicate positions"]).exists())
+
+    def category_payload(self):
+        return {
+            "title": "Fictional category test",
+            "source_url": "https://example.test/categories",
+            "fields": [
+                {"position": 0, "label": "Name", "input_type": "text"},
+            ],
+        }
+
+    def test_extraction_saves_categories_and_exposes_them_in_queue_and_detail(self):
+        client = self.reviewer_client()
+        payload = self.category_payload()
+        # Surrounding whitespace should be removed before saving.
+        payload["categories"] = [" Housing ", "Education"]
+
+        response = client.post(reverse("form-extraction"), payload, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        expected = ["Housing", "Education"]
+        self.assertEqual(response.data["categories"], expected)
+
+        created = PracticeForm.objects.get(id=response.data["id"])
+        self.assertEqual(created.categories, expected)
+
+        detail = client.get(
+            reverse("review-form-detail", kwargs={"form_id": created.id})
+        )
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["categories"], expected)
+
+        queue = client.get(reverse("review-form-list"))
+        self.assertEqual(queue.status_code, status.HTTP_200_OK)
+        queued_form = next(
+            item for item in queue.data if str(item["id"]) == str(created.id)
+        )
+        self.assertEqual(queued_form["categories"], expected)
+
+    def test_extraction_rejects_blank_or_duplicate_categories_without_saving(self):
+        client = self.reviewer_client()
+        invalid_categories = [
+            [""],
+            ["   "],
+            ["Housing", " housing "],
+        ]
+        # Invalid requests must not create forms, fields, or notifications.
+        before = (
+            PracticeForm.objects.count(),
+            FormField.objects.count(),
+            ReviewNotification.objects.count(),
+        )
+
+        for categories in invalid_categories:
+            with self.subTest(categories=categories):
+                payload = self.category_payload()
+                payload["categories"] = categories
+
+                response = client.post(
+                    reverse("form-extraction"), payload, format="json"
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("categories", response.data)
+                self.assertEqual(
+                    (
+                        PracticeForm.objects.count(),
+                        FormField.objects.count(),
+                        ReviewNotification.objects.count(),
+                    ),
+                    before,
+                )
+
+    def test_extraction_defaults_to_empty_categories_when_omitted(self):
+        response = self.reviewer_client().post(
+            reverse("form-extraction"),
+            self.category_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["categories"], [])
+        created = PracticeForm.objects.get(id=response.data["id"])
+        self.assertEqual(created.categories, [])
