@@ -1,208 +1,207 @@
 /**
  * content/navigation_controller.js
- * Step-navigation engine: fills required fields, triggers next-step actions,
- * waits for DOM changes, detects loops, and enforces safety rules.
+ * Advances a form by one step: fill the required fields with fictional data,
+ * choose a safe "Next"-type action, click it, and wait for the page to
+ * meaningfully change (in-page re-render, client-side route change, or a
+ * full page load). When the site rejects the sample values, the visible
+ * validation feedback is read and alternative values are tried a small,
+ * configurable number of times.
+ *
+ * It never clicks an action classified as final or ambiguous.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
+  const U = PM.utils;
+  const { extractFields, harvestOptions } = PM.fieldExtractor;
+  const populator = PM.fieldPopulator;
+  const detector = PM.stepDetector;
 
-window.PracticeMode.navigationController = (() => {
-  const { waitForDOMStability, sleep } = window.PracticeMode.utils;
-  const {
-    detectNavigationElements,
-    detectValidationErrors,
-    detectBarriers,
-    isFinalReviewPage,
-    detectStepIndicator,
-  } = window.PracticeMode.stepDetector;
-  const { populateRequiredFields } = window.PracticeMode.fieldPopulator;
-
-  // ──────────────────────────────────────────────
-  // Loop detection
-  // ──────────────────────────────────────────────
-
-  const MAX_STEPS = 20;
-  const MAX_RETRIES_PER_STEP = 2;
-
-  function getPageSignature() {
-    // URL + step title + visible field fingerprints as step identity
-    const heading = document.querySelector('h1, h2, [class*="step-title"], [class*="section-title"], [class*="title"]')?.innerText?.trim() || '';
-    const fields = window.PracticeMode.fieldExtractor.extractFields();
-    const fingerprints = fields.map((f) => f._fingerprint).sort().join('|');
-    return `${window.location.href}::${heading}::${fingerprints}`;
+  function quickTitle() {
+    try { return detector.detectStepIndicator().activeTitle || ''; } catch (_) { return ''; }
   }
 
-  // ──────────────────────────────────────────────
-  // Safety gate
-  // ──────────────────────────────────────────────
-
-  /**
-   * Determine if auto-navigation is safe on this page.
-   * Returns { safe, reason }
-   */
-  function checkSafetyPermission(state) {
-    // The user explicitly starts extraction, so advance through ordinary form
-    // steps on any origin. The hard stops below still protect final submission,
-    // auth/CAPTCHA barriers, uploads, and sensitive identifiers.
-    return { safe: true };
+  function currentIdentity() {
+    const fields = extractFields();
+    return detector.stepIdentity(fields, quickTitle());
   }
 
-  // ──────────────────────────────────────────────
-  // Navigation action
-  // ──────────────────────────────────────────────
-
   /**
-   * Click the best next-step button found.
-   * Returns { clicked, button, isFinal }
+   * Wait until the page shows a different step than `before`.
+   * Resolves { changed: boolean, kind: 'in-page' | 'route-change' | 'full-page' }.
+   * A full page load destroys this script; the pending navigation recorded
+   * in the extraction state lets the next page continue.
    */
-  function clickNextButton(navEls) {
-    // Prefer explicitly labeled next buttons (prefer non-disabled)
-    if (navEls.nextButtons.length > 0) {
-      const btn = navEls.nextButtons.find(b => !b.disabled && b.getAttribute('aria-disabled') !== 'true');
-      if (!btn) return { clicked: false, isFinal: false };
-      btn.click();
-      return { clicked: true, button: btn, isFinal: false };
-    }
-
-    // Ambiguous submit in a wizard context — use with caution
-    const wizardSubmit = navEls.ambiguousButtons.find((b) => b.category === 'next_submit');
-    if (wizardSubmit) {
-      const btn = wizardSubmit.button;
-      btn.click();
-      return { clicked: true, button: btn, isFinal: false };
-    }
-
-    return { clicked: false, isFinal: false };
-  }
-
-  // ──────────────────────────────────────────────
-  // Per-step advancement
-  // ──────────────────────────────────────────────
-
-  /**
-   * Attempt to advance from the current step to the next.
-   * Returns { advanced, warning, requiresManual, isFinal }
-   */
-  async function advanceStep(currentStepFields, state) {
-    // 1. Safety check
-    const safety = checkSafetyPermission(state);
-    if (!safety.safe) {
-      return { advanced: false, warning: safety.reason, requiresManual: true };
-    }
-
-    // 2. Check for barriers
-    const barriers = detectBarriers();
-    if (barriers.length > 0) {
-      return {
-        advanced: false,
-        warning: `Barrier detected: ${barriers.map((b) => b.message).join('; ')}`,
-        requiresManual: true,
+  function waitForStepChange(before, timeout = 10000) {
+    return new Promise((resolve) => {
+      const startHref = location.href;
+      let finished = false;
+      const finish = (value) => {
+        if (finished) return;
+        finished = true;
+        clearInterval(poller);
+        clearTimeout(timer);
+        window.removeEventListener('pagehide', onHide);
+        window.removeEventListener('beforeunload', onHide);
+        resolve(value);
       };
+      const onHide = () => finish({ changed: true, kind: 'full-page' });
+      window.addEventListener('pagehide', onHide);
+      window.addEventListener('beforeunload', onHide);
+
+      let checking = false;
+      const poller = setInterval(async () => {
+        if (checking || finished) return;
+        checking = true;
+        try {
+          const routeChanged = location.href !== startHref;
+          const now = currentIdentity();
+          if (routeChanged || !detector.sameStep(before, now)) {
+            await U.waitForDOMStability(300, 3000);
+            const settled = currentIdentity();
+            if (routeChanged || !detector.sameStep(before, settled)) {
+              finish({ changed: true, kind: routeChanged ? 'route-change' : 'in-page' });
+            }
+          }
+        } finally {
+          checking = false;
+        }
+      }, 200);
+      const timer = setTimeout(() => finish({ changed: false }), timeout);
+    });
+  }
+
+  async function fillUntilStable(environment, attempt, feedback, result) {
+    let live = extractFields();
+    if (live.some((f) => f._kind === 'custom-select' && !f.options?.length)) {
+      await harvestOptions(live);
+      live = extractFields();
     }
-
-    // 3. Check if this is the final page — do NOT auto-submit
-    if (isFinalReviewPage()) {
-      return { advanced: false, isFinal: true, warning: 'Final review page reached — stopping to prevent submission.' };
+    const mergeOutcome = (outcome) => {
+      result.filled.push(...outcome.filled);
+      result.manual.push(...outcome.manual);
+      result.failed.push(...outcome.failed);
+      result.choices.push(...outcome.choices);
+    };
+    mergeOutcome(await populator.fillStep(live, {
+      environment,
+      attempt,
+      targetKeys: feedback.invalidKeys,
+      feedbackByKey: feedback.byKey,
+    }));
+    // A chosen answer can reveal further required questions; fill those too.
+    for (let pass = 0; pass < 3 && !result.manual.length; pass++) {
+      await U.waitForDOMStability(150, 900);
+      const again = extractFields();
+      const known = new Set(live.map((f) => f._key));
+      const fresh = again.filter((f) => !known.has(f._key));
+      if (!fresh.length) break;
+      if (fresh.some((f) => f._kind === 'custom-select' && !f.options?.length)) await harvestOptions(fresh);
+      mergeOutcome(await populator.fillStep(extractFields().filter((f) => !known.has(f._key)), { environment, attempt }));
+      live = extractFields();
     }
+    return live;
+  }
 
-    // 4. Initial check for navigation elements
-    let navEls = detectNavigationElements();
-
-    if (navEls.nextButtons.length === 0 && navEls.ambiguousButtons.length === 0 && navEls.finalButtons.length > 0) {
-      return { advanced: false, isFinal: true, warning: 'Only submission buttons detected — stopping.' };
-    }
-
-    // 5. Populate required fields
-    const popResult = await populateRequiredFields(currentStepFields);
+  /**
+   * Try to move from the current step to the next one.
+   *
+   * options:
+   *   environment    'fixture' | 'production'
+   *   maxRetries     validation retries after the first attempt
+   *   checkpoint     async () => true when the user paused/stopped
+   *   onBeforeClick  async ({ action }) => void, persisted before navigating
+   *   onProgress     (message) => void
+   *
+   * Returns { status, reason?, blocker?, action?, kind?, choices, warnings }
+   *   status: advanced | final | no_action | confirm | manual | unchanged |
+   *           validation_blocked | aborted
+   */
+  async function advance({ environment, maxRetries = 2, checkpoint = async () => false, onBeforeClick = async () => {}, onProgress = () => {} }) {
     const warnings = [];
+    const choices = [];
+    let feedback = { byKey: new Map(), invalidKeys: new Set(), messages: [] };
 
-    if (popResult.requiresManual.length > 0) {
-      return {
-        advanced: false,
-        warning: `Manual input needed: ${popResult.requiresManual.map((r) => r.reason).join('; ')}`,
-        requiresManual: true,
-      };
-    }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (await checkpoint()) return { status: 'aborted', choices, warnings };
 
-    if (popResult.failed.length > 0) {
-      warnings.push(`Some fields could not be populated: ${popResult.failed.map((f) => f.field).join(', ')}`);
-    }
-
-    // A required choice can reveal more required controls. Re-read the live
-    // page after filling the initial snapshot so those controls are included
-    // before we attempt to advance.
-    await sleep(200);
-    const newlyVisibleFields = window.PracticeMode.fieldExtractor.extractFields();
-    const revealedPopResult = await populateRequiredFields(newlyVisibleFields);
-    if (revealedPopResult.requiresManual.length > 0) {
-      return {
-        advanced: false,
-        warning: `Manual input needed: ${revealedPopResult.requiresManual.map((r) => r.reason).join('; ')}`,
-        requiresManual: true,
-      };
-    }
-    if (revealedPopResult.failed.length > 0) {
-      warnings.push(`Some revealed fields could not be populated: ${revealedPopResult.failed.map((f) => f.field).join(', ')}`);
-    }
-
-    // 6. Re-detect navigation elements after populating required fields
-    // Frameworks like React/Angular dynamically unlock or render the Next button upon input
-    await sleep(200);
-    navEls = detectNavigationElements();
-
-    if (navEls.nextButtons.length > 0 && navEls.nextButtons.every(button => button.disabled || button.getAttribute('aria-disabled') === 'true')) {
-      await sleep(500);
-      navEls = detectNavigationElements();
-    }
-
-    if (navEls.nextButtons.length === 0 && navEls.ambiguousButtons.length === 0) {
-      if (navEls.finalButtons.length > 0) {
-        return { advanced: false, isFinal: true, warning: 'Only submission buttons detected — stopping.' };
+      onProgress(attempt === 0 ? 'Filling required fields with fictional data…' : `Retrying with different sample values (${attempt}/${maxRetries})…`);
+      const fill = { filled: [], manual: [], failed: [], choices: [] };
+      const live = await fillUntilStable(environment, attempt, feedback, fill);
+      choices.push(...fill.choices);
+      if (fill.failed.length) warnings.push(`Could not fill: ${fill.failed.map((f) => `"${f.field}" (${f.reason})`).join(', ')}`);
+      if (fill.manual.length) {
+        return {
+          status: 'manual',
+          reason: fill.manual.map((m) => m.reason).join(' '),
+          blocker: fill.manual[0].blocker || 'manual_input',
+          fields: fill.manual.map((m) => m.field),
+          choices,
+          warnings,
+        };
       }
-      return { advanced: false, warning: 'No next-step button found.', requiresManual: true };
+
+      if (await checkpoint()) return { status: 'aborted', choices, warnings };
+
+      const actions = detector.summarize(detector.findActions(live));
+      if (!actions.next.length) {
+        if (actions.ambiguous.length) {
+          return {
+            status: 'confirm',
+            action: actions.ambiguous[0].text,
+            reason: `The only way forward is "${actions.ambiguous[0].text}", which might submit or save data. Click it yourself if you are sure it only moves to the next step.`,
+            choices,
+            warnings,
+          };
+        }
+        if (actions.final.length) return { status: 'final', action: actions.final[0].text, choices, warnings };
+        return { status: 'no_action', choices, warnings };
+      }
+
+      let target = actions.next[0];
+      if (target.disabled) {
+        // Dynamic forms enable Next once their own validation passes.
+        const enabled = await U.waitUntil(() => !detector.isDisabled(target.el), 2500, 100);
+        if (!enabled) {
+          feedback = detector.validationFeedback(extractFields());
+          // Treat every empty field as a candidate on the retry.
+          warnings.push(`"${target.text}" stayed disabled after filling required fields.`);
+          continue;
+        }
+      }
+
+      const before = detector.stepIdentity(live, quickTitle());
+      await onBeforeClick({ action: target.text });
+      onProgress(`Clicking "${target.text}"…`);
+      target.el.click();
+
+      let change = await waitForStepChange(before, 9000);
+      if (change.changed) return { status: 'advanced', action: target.text, kind: change.kind, choices, warnings };
+
+      const afterFields = extractFields();
+      feedback = detector.validationFeedback(afterFields);
+      if (!feedback.messages.length && !feedback.invalidKeys.size) {
+        change = await waitForStepChange(before, 4000);
+        if (change.changed) return { status: 'advanced', action: target.text, kind: change.kind, choices, warnings };
+        return {
+          status: 'unchanged',
+          action: target.text,
+          reason: `Clicking "${target.text}" did not change the page and no validation message was shown. Continue manually if the form needs something PracticeMode cannot see.`,
+          choices,
+          warnings,
+        };
+      }
+      warnings.push(`The site rejected the sample values: ${feedback.messages.slice(0, 3).join(' | ') || 'fields marked invalid'}`);
     }
 
-    // 7. Click next
-    const preSignature = getPageSignature();
-    const clickResult = clickNextButton(navEls);
-
-    if (!clickResult.clicked) {
-      return { advanced: false, warning: 'Could not click next button.', requiresManual: true };
-    }
-
-    // 9. Wait for DOM to stabilize
-    await waitForDOMStability(700, 8000);
-    await sleep(300);
-
-    // 10. Validate errors didn't appear
-    const errors = detectValidationErrors();
-    if (errors.length > 0) {
-      return {
-        advanced: false,
-        warning: `Validation errors after clicking next: ${errors.slice(0, 3).join('; ')}`,
-        validationErrors: errors,
-        requiresManual: false, // might retry
-      };
-    }
-
-    // 11. Loop detection
-    const postSignature = getPageSignature();
-    if (preSignature === postSignature) {
-      return {
-        advanced: false,
-        warning: 'Page did not change after clicking next — possible loop or failed navigation.',
-        requiresManual: true,
-      };
-    }
-
-    return { advanced: true, warnings };
+    return {
+      status: 'validation_blocked',
+      reason: `The site still rejects the sample values after ${maxRetries} ${maxRetries === 1 ? 'retry' : 'retries'}: ${feedback.messages.slice(0, 2).join(' | ') || 'some fields remain invalid'}. Correct them yourself and press Continue.`,
+      blocker: 'validation',
+      choices,
+      warnings,
+    };
   }
 
-  return {
-    advanceStep,
-    checkSafetyPermission,
-    getPageSignature,
-    MAX_STEPS,
-    MAX_RETRIES_PER_STEP,
-  };
+  PM.navigationController = { advance, waitForStepChange, currentIdentity, quickTitle };
 })();

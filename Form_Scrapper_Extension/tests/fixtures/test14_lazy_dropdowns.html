@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 14 — Lazily rendered and virtualised dropdowns</title>
+  <link rel="stylesheet" href="_shared.css"/>
+  <style>
+    .step { display: none; } .step.active { display: block; }
+    .rs-control { display: flex; align-items: center; border: 1.5px solid #ddd; border-radius: 8px; padding: 0 10px; background: #fff; cursor: pointer; }
+    .rs-control input { border: none; padding: 10px 0; outline: none; }
+    .rs-value { position: absolute; left: 12px; top: 33px; pointer-events: none; color: #111; }
+    .rs-menu { position: absolute; left: 0; right: 0; top: 64px; z-index: 5; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,.12); }
+    .rs-scroller { height: 200px; overflow-y: auto; position: relative; }
+    .rs-option { position: absolute; left: 0; right: 0; height: 32px; line-height: 32px; padding: 0 12px; cursor: pointer; }
+    .rs-option:hover { background: #eef2ff; }
+    .lb-button { width: 100%; text-align: left; padding: 10px 12px; border: 1.5px solid #ddd; border-radius: 8px; background: #fff; font-size: 14px; cursor: pointer; }
+    .portal-list { position: absolute; z-index: 10; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,.12); list-style: none; margin: 0; padding: 4px 0; max-height: 220px; overflow-y: auto; width: 240px; }
+    .portal-list li { padding: 6px 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Program Enrollment</h1>
+  <p class="step-indicator" id="stepLabel">Step 1 of 2 — Preferences</p>
+
+  <div class="step active" id="s1">
+    <!-- Native select with option groups -->
+    <div class="field">
+      <label for="country">Country of residence *</label>
+      <select id="country" name="country" required>
+        <option value="">Select a country</option>
+        <optgroup label="North America">
+          <option value="US">United States</option>
+          <option value="CA">Canada</option>
+          <option value="MX">Mexico</option>
+        </optgroup>
+        <optgroup label="Europe">
+          <option value="GB">United Kingdom</option>
+          <option value="DE">Germany</option>
+          <option value="FR">France</option>
+          <option value="ES">Spain</option>
+        </optgroup>
+        <optgroup label="Asia">
+          <option value="IN">India</option>
+          <option value="JP">Japan</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- react-select style: options exist only while open, and only the
+         rows scrolled into view are rendered (virtualised list). -->
+    <div class="field" id="deptField">
+      <label id="dept-label">Department *</label>
+      <div class="rs-control" id="deptControl">
+        <input id="dept-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-haspopup="listbox"
+               aria-labelledby="dept-label" aria-required="true" autocomplete="off" placeholder="Select…"/>
+      </div>
+      <span class="rs-value" id="deptValue"></span>
+      <input type="hidden" name="department" id="deptHidden"/>
+      <div class="error-msg" id="deptError">Please choose a department.</div>
+    </div>
+
+    <!-- Headless-UI style listbox button: options are rendered into a portal
+         at the end of <body> only while open. -->
+    <div class="field" id="monthField">
+      <label id="month-label">Start month *</label>
+      <button type="button" class="lb-button" id="monthButton" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="month-label monthButton">Pick a month</button>
+      <input type="hidden" name="startMonth" id="monthHidden"/>
+      <div class="error-msg" id="monthError">Please choose a start month.</div>
+    </div>
+
+    <div class="btn-row"><button class="btn" type="button" onclick="next()">Next</button></div>
+  </div>
+
+  <div class="step" id="s2">
+    <p>Review your enrollment, then submit.</p>
+    <div class="btn-row">
+      <button class="btn btn-back" type="button" onclick="show(1)">Back</button>
+      <button class="btn" type="button" onclick="alert('PracticeMode: Submission blocked.')">Submit enrollment</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── Virtualised react-select-like combobox ──
+  const DEPARTMENTS = ['Accounting', 'Administration', 'Agriculture', 'Architecture', 'Biology', 'Business Analytics', 'Chemistry',
+    'Civil Engineering', 'Communications', 'Computer Science', 'Construction', 'Customer Success', 'Data Science', 'Design',
+    'Economics', 'Education', 'Electrical Engineering', 'Environmental Science', 'Finance', 'Graphic Design', 'Healthcare',
+    'History', 'Hospitality', 'Human Resources', 'Journalism', 'Law', 'Linguistics', 'Logistics', 'Marketing', 'Mathematics',
+    'Mechanical Engineering', 'Music', 'Nursing', 'Operations', 'Philosophy', 'Physics', 'Psychology', 'Public Health',
+    'Sales', 'Sociology'];
+  const ROW = 32, VISIBLE = 7;
+  const input = document.getElementById('dept-input');
+  const control = document.getElementById('deptControl');
+  let menu = null;
+
+  function renderRows(scroller) {
+    const start = Math.floor(scroller.scrollTop / ROW);
+    const listbox = scroller.querySelector('[role="listbox"]');
+    listbox.querySelectorAll('[role="option"]').forEach((n) => n.remove());
+    for (let i = start; i < Math.min(DEPARTMENTS.length, start + VISIBLE); i++) {
+      const opt = document.createElement('div');
+      opt.className = 'rs-option';
+      opt.id = `dept-option-${i}`;
+      opt.setAttribute('role', 'option');
+      opt.style.top = `${i * ROW}px`;
+      opt.textContent = DEPARTMENTS[i];
+      opt.addEventListener('click', () => choose(DEPARTMENTS[i]));
+      listbox.appendChild(opt);
+    }
+  }
+
+  function openMenu() {
+    if (menu) return;
+    menu = document.createElement('div');
+    menu.className = 'rs-menu';
+    menu.innerHTML = `<div class="rs-scroller"><div role="listbox" id="dept-listbox" style="height:${DEPARTMENTS.length * ROW}px;position:relative"></div></div>`;
+    document.getElementById('deptField').appendChild(menu);
+    const scroller = menu.querySelector('.rs-scroller');
+    scroller.addEventListener('scroll', () => renderRows(scroller));
+    renderRows(scroller);
+    input.setAttribute('aria-expanded', 'true');
+    input.setAttribute('aria-controls', 'dept-listbox');
+  }
+
+  function closeMenu() {
+    if (!menu) return;
+    menu.remove();
+    menu = null;
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-controls');
+  }
+
+  function choose(value) {
+    document.getElementById('deptValue').textContent = value;
+    document.getElementById('deptHidden').value = value;
+    input.placeholder = '';
+    closeMenu();
+  }
+
+  control.addEventListener('mousedown', (e) => { e.preventDefault(); input.focus(); menu ? closeMenu() : openMenu(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') openMenu();
+    if (e.key === 'Escape') closeMenu();
+  });
+  input.addEventListener('blur', () => setTimeout(closeMenu, 150));
+
+  // ── Listbox button with a body portal ──
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const button = document.getElementById('monthButton');
+  let portal = null;
+  function openPortal() {
+    const rect = button.getBoundingClientRect();
+    portal = document.createElement('ul');
+    portal.className = 'portal-list';
+    portal.id = 'month-options';
+    portal.setAttribute('role', 'listbox');
+    portal.style.left = `${rect.left + window.scrollX}px`;
+    portal.style.top = `${rect.bottom + window.scrollY + 4}px`;
+    MONTHS.forEach((m) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.textContent = m;
+      li.addEventListener('click', () => {
+        button.textContent = m;
+        document.getElementById('monthHidden').value = m;
+        closePortal();
+      });
+      portal.appendChild(li);
+    });
+    document.body.appendChild(portal);
+    button.setAttribute('aria-expanded', 'true');
+    button.setAttribute('aria-controls', 'month-options');
+  }
+  function closePortal() {
+    portal?.remove();
+    portal = null;
+    button.setAttribute('aria-expanded', 'false');
+    button.removeAttribute('aria-controls');
+  }
+  button.addEventListener('click', () => (portal ? closePortal() : openPortal()));
+  button.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePortal(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePortal(); });
+
+  function show(n) {
+    document.querySelectorAll('.step').forEach((s) => s.classList.remove('active'));
+    document.getElementById(`s${n}`).classList.add('active');
+    document.getElementById('stepLabel').textContent = n === 1 ? 'Step 1 of 2 — Preferences' : 'Step 2 of 2 — Review';
+  }
+  function next() {
+    const deptOk = Boolean(document.getElementById('deptHidden').value);
+    const monthOk = Boolean(document.getElementById('monthHidden').value);
+    const countryOk = Boolean(document.getElementById('country').value);
+    document.getElementById('deptError').classList.toggle('show', !deptOk);
+    document.getElementById('monthError').classList.toggle('show', !monthOk);
+    if (deptOk && monthOk && countryOk) show(2);
+  }
+</script>
+</body>
+</html>

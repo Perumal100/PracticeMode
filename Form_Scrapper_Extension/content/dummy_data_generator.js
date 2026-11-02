@@ -1,283 +1,355 @@
 /**
  * content/dummy_data_generator.js
- * Modular synthetic data generator — completely independent of extraction engine.
- * Produces fictional, validation-compatible, non-sensitive test values only.
+ * Fictional, validation-compatible sample values for form fields.
+ *
+ * Independent of extraction and navigation: it only receives a plain field
+ * descriptor and a context, and returns a value. It can be replaced or
+ * disabled without touching the extraction engine.
+ *
+ *   generate(field, { attempt, environment, feedback })
+ *     attempt      0 for the first try; higher values produce alternatives
+ *     environment  'fixture' | 'production' (from the safety policy)
+ *     feedback     validation message shown by the site for this field, if any
+ *
+ * Returns { value } or { value: null, requiresManual: true, reason, blocker }.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
+  const policy = PM.safetyPolicy;
+  const sampler = PM.regexSampler;
 
-window.PracticeMode.dummyDataGenerator = (() => {
-  // ──────────────────────────────────────────────
-  // Static fictional data pools
-  // ──────────────────────────────────────────────
-  const FIRST_NAMES = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey', 'Riley', 'Sam', 'Drew'];
-  const LAST_NAMES = ['Example', 'Sample', 'Testuser', 'Demo', 'Placeholder'];
-  const CITIES = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix'];
-  const STATES = ['NY', 'CA', 'IL', 'TX', 'AZ'];
-  const STREETS = ['123 Main St', '456 Oak Ave', '789 Pine Rd', '321 Elm St'];
-  const COMPANIES = ['Example Corp', 'Demo Inc', 'Sample LLC', 'Test Enterprises'];
-  const JOB_TITLES = ['Software Engineer', 'Project Manager', 'Data Analyst', 'Designer'];
-  const SCHOOLS = ['State University', 'City College', 'Example Academy'];
-  const DEGREES = ["Bachelor's", "Master's", 'High School Diploma', 'Associate Degree'];
-  const MAJORS = ['Computer Science', 'Business', 'Engineering', 'Communications'];
+  const FIRST_NAMES = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Casey'];
+  const LAST_NAMES = ['Example', 'Sample', 'Demo', 'Placeholder', 'Testwell'];
+  const PEOPLE = { first: FIRST_NAMES, last: LAST_NAMES };
 
-  function pick(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+  const TEXT_HINTS = [
+    // [regex over label/name/autocomplete, value or (attempt) => value]
+    [/given-name|first\s*name|fname|forename/i, (a) => PEOPLE.first[a % 5]],
+    [/family-name|last\s*name|lname|surname/i, (a) => PEOPLE.last[a % 5]],
+    [/additional-name|middle\s*(name|initial)/i, 'Q'],
+    [/preferred\s*(first\s*)?name|nickname/i, 'Alex'],
+    [/\bpronoun/i, 'they/them'],
+    [/full\s*name|your\s*name|^name$|legal\s*name|\bname\b(?!.*(company|employer|school|business|organi[sz]ation|program|institution|reference))/i, (a) => `${PEOPLE.first[a % 5]} ${PEOPLE.last[a % 5]}`],
+    [/username|user\s*name|login\s*id|handle/i, (a) => `alex_example${a ? a + 1 : ''}`],
+    [/e-?mail/i, (a) => (a ? `alex.example${a}@example.com` : 'alex@example.com')],
+    [/linkedin/i, 'https://www.linkedin.com/in/alex-example'],
+    [/github/i, 'https://github.com/alex-example'],
+    [/portfolio|website|personal\s*site|url|homepage|blog/i, 'https://example.com'],
+    [/address-line2|address\s*(line\s*)?2|apt|apartment|suite|unit/i, 'Apt 4B'],
+    [/street-address|address-line1|street|address\s*(line\s*)?1|mailing\s*address|^address$|home\s*address/i, '123 Main St'],
+    [/address-level2|\bcity\b|town/i, 'New York'],
+    [/address-level1|\bstate\b|province|region/i, 'NY'],
+    [/postal-code|zip|postal|postcode/i, '10001'],
+    [/country-name|\bcountry\b|nationality|citizenship/i, 'United States'],
+    [/county/i, 'New York County'],
+    [/organization-title|job\s*title|position|role|designation|occupation/i, 'Software Engineer'],
+    [/organization|company|employer|business\s*name|organi[sz]ation/i, 'Example Corp'],
+    [/school|university|college|institution|academy/i, 'State University'],
+    [/major|field\s*of\s*study|discipline|concentration|program/i, 'Computer Science'],
+    [/degree|qualification/i, "Bachelor's"],
+    [/\bgpa\b|grade\s*point/i, '3.8'],
+    [/how\s*did\s*you\s*hear|referr(al|ed)|source/i, 'Job board'],
+    [/salary|compensation|pay\s*expectation/i, '60000'],
+    [/notice\s*period/i, '2 weeks'],
+    [/years?\s*of\s*experience|experience\s*\(years\)/i, '3'],
+    [/reference/i, 'Jordan Sample'],
+    [/skill/i, 'Communication, Teamwork'],
+    [/language/i, 'English'],
+    [/interest|hobb/i, 'Reading, Hiking'],
+    [/promo|coupon|discount|referral\s*code/i, 'SAMPLE10'],
+  ];
+
+  const PARAGRAPH = 'This is fictional sample text written by PracticeMode to explore the form structure. It does not describe a real person.';
+
+  function hayOf(field) {
+    return [field.label, field.name, field.id, field.autocomplete, field.placeholder].filter(Boolean).join(' ');
   }
 
-  function constraints(field) {
+  function limits(field) {
+    const v = field.validation || {};
+    const num = (x) => (x === undefined || x === null || x === '' ? undefined : Number(x));
     return {
-      minLength: field.minLength ?? field.validation?.minLength,
-      maxLength: field.maxLength ?? field.validation?.maxLength,
-      min: field.min ?? field.validation?.min,
-      max: field.max ?? field.validation?.max,
-      pattern: field.pattern ?? field.validation?.pattern,
+      minLength: num(v.minLength) || 0,
+      maxLength: num(v.maxLength) || 0,
+      min: v.min,
+      max: v.max,
+      step: v.step,
+      pattern: v.pattern,
     };
   }
 
-  function withinRange(value, min, max) {
+  function semanticText(field, attempt) {
+    const hay = hayOf(field);
+    for (const [re, value] of TEXT_HINTS) {
+      if (re.test(hay)) return typeof value === 'function' ? value(attempt) : value;
+    }
+    return null;
+  }
+
+  function fitLength(value, { minLength, maxLength }) {
+    let out = String(value);
+    if (minLength && out.length < minLength) {
+      const filler = ' sample text';
+      while (out.length < minLength) out += filler;
+      out = out.slice(0, Math.max(minLength, Math.min(out.length, maxLength || out.length)));
+    }
+    if (maxLength && out.length > maxLength) out = out.slice(0, maxLength).trimEnd() || out.slice(0, maxLength);
+    return out;
+  }
+
+  // ── Dates ───────────────────────────────────────────────────────────
+  function iso(d) {
+    return d.toISOString().slice(0, 10);
+  }
+
+  function addDays(days) {
+    const d = new Date();
+    d.setUTCHours(12, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d;
+  }
+
+  function clampIso(value, min, max) {
     if (min && value < min) return min;
     if (max && value > max) return max;
     return value;
   }
 
-  // ──────────────────────────────────────────────
-  // Field-type generators
-  // ──────────────────────────────────────────────
+  function preferredDate(field, feedback) {
+    const hay = `${hayOf(field)} ${feedback || ''}`;
+    if (/future|after\s+today|later\s+than\s+today|upcoming/i.test(feedback || '')) return iso(addDays(60));
+    if (/past|before\s+today|earlier\s+than\s+today/i.test(feedback || '')) return '2020-01-15';
+    if (/birth|dob|born|bday/i.test(hay)) return '1995-05-15';
+    if (/anticipat|expected|availab|earliest|desired|move.?in|preferred\s*date/i.test(hay)) return iso(addDays(60));
+    if (/graduat/i.test(hay)) return '2020-05-15';
+    if (/end|until|through|to\s*date|last\s*employ/i.test(hay)) return '2022-12-31';
+    if (/start|begin|from|since|hire/i.test(hay)) return '2019-01-15';
+    return '2021-06-15';
+  }
 
-  const generators = {
-    // Text inputs by semantic hint
-    text(field) {
-      const label = (field.label || field.name || '').toLowerCase();
-      const { minLength, maxLength } = constraints(field);
-      if (/first.?name|given.?name|fname/i.test(label)) return pick(FIRST_NAMES);
-      if (/last.?name|surname|family.?name|lname/i.test(label)) return pick(LAST_NAMES);
-      if (/full.?name/i.test(label)) return `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`;
-      if (/city/i.test(label)) return pick(CITIES);
-      if (/state|province/i.test(label)) return pick(STATES);
-      if (/street|address\s*1|addr/i.test(label)) return pick(STREETS);
-      if (/address\s*2|apt|suite/i.test(label)) return 'Apt 4B';
-      if (/zip|postal/i.test(label)) return '10001';
-      if (/company|employer|organization/i.test(label)) return pick(COMPANIES);
-      if (/job.?title|position|role/i.test(label)) return pick(JOB_TITLES);
-      if (/school|university|college|institution/i.test(label)) return pick(SCHOOLS);
-      if (/major|field.?of.?study/i.test(label)) return pick(MAJORS);
-      if (/degree/i.test(label)) return pick(DEGREES);
-      if (/country/i.test(label)) return 'United States';
-      if (/linkedin/i.test(label)) return 'https://www.linkedin.com/in/alexexample';
-      if (/website|url|portfolio/i.test(label)) return 'https://example.com';
-      if (/gpa/i.test(label)) return '3.8';
-      // Respect minlength/maxlength
-      const min = parseInt(minLength) || 3;
-      const max = parseInt(maxLength) || 20;
-      const base = 'TestValue';
-      return base.repeat(Math.ceil(min / base.length)).slice(0, Math.min(max, 20));
-    },
+  function formatForPlaceholder(isoDate, placeholder) {
+    const [y, m, d] = isoDate.split('-');
+    const p = String(placeholder || '').toLowerCase();
+    if (/dd[./-]mm[./-]yyyy/.test(p)) return `${d}/${m}/${y}`;
+    if (/yyyy[./-]mm[./-]dd/.test(p)) return `${y}-${m}-${d}`;
+    if (/mm[./-]yyyy/.test(p) || /month\s*\/\s*year/.test(p)) return `${m}/${y}`;
+    if (/mm[./-]yy\b/.test(p)) return `${m}/${y.slice(2)}`;
+    return `${m}/${d}/${y}`;
+  }
 
-    email(field) {
-      return 'alex@example.com';
-    },
+  function looksLikeDateText(field) {
+    return /\bdate\b|\bdob\b|birthday|mm\s*\/\s*dd|dd\s*\/\s*mm|yyyy|pick\s*date/i.test(hayOf(field));
+  }
 
-    tel(field) {
-      return '212-555-0100';
-    },
+  // ── Numbers ─────────────────────────────────────────────────────────
+  function numberValue(field, attempt) {
+    const { min, max, step } = limits(field);
+    const lo = min !== undefined && min !== '' && Number.isFinite(Number(min)) ? Number(min) : undefined;
+    const hi = max !== undefined && max !== '' && Number.isFinite(Number(max)) ? Number(max) : undefined;
+    const hay = hayOf(field);
+    let preferred;
+    if (/year/i.test(hay)) preferred = /expect|anticip|entry|start|future/i.test(hay) ? new Date().getFullYear() + 1 : 2020;
+    else if (/\bage\b/i.test(hay)) preferred = 28;
+    else if (/salary|income|compensation/i.test(hay)) preferred = 60000;
+    else if (/gpa/i.test(hay)) preferred = 3.8;
+    else if (/experience|years/i.test(hay)) preferred = 3;
+    else if (/zip|postal/i.test(hay)) return '10001';
+    else if (/phone|mobile/i.test(hay)) return '2125550100';
+    else preferred = lo !== undefined && hi !== undefined ? (lo + hi) / 2 : lo !== undefined ? lo + 1 : hi !== undefined ? Math.min(hi, 5) : 5;
+    let value = preferred + attempt;
+    if (lo !== undefined && value < lo) value = lo;
+    if (hi !== undefined && value > hi) value = hi;
+    const stepNum = Number(step);
+    if (step && step !== 'any' && Number.isFinite(stepNum) && stepNum > 0) {
+      const base = lo ?? 0;
+      value = base + Math.round((value - base) / stepNum) * stepNum;
+      if (hi !== undefined && value > hi) value -= stepNum;
+      const decimals = (String(step).split('.')[1] || '').length;
+      return value.toFixed(decimals);
+    }
+    if (!Number.isInteger(value) && !/gpa/i.test(hay)) value = Math.round(value);
+    return String(value);
+  }
 
-    number(field) {
-      const label = (field.label || field.name || '').toLowerCase();
-      const limits = constraints(field);
-      const min = Number.isFinite(parseFloat(limits.min)) ? parseFloat(limits.min) : 0;
-      const max = Number.isFinite(parseFloat(limits.max)) ? parseFloat(limits.max) : 100;
+  // ── Choices ─────────────────────────────────────────────────────────
+  function usableOptions(field) {
+    return (field.options || []).filter((o) => !o.disabled && !o.isPlaceholder && String(o.value ?? o.label ?? '') !== '');
+  }
 
-      if (/year|grad/i.test(label)) return String(withinRange(2020, min, max));
-      if (/age/i.test(label)) return String(withinRange(28, min, max));
-      if (/salary|income/i.test(label)) return String(withinRange(55000, min, max));
-      if (/gpa/i.test(label)) return Math.min(4.0, Math.max(min, 3.8)).toString();
+  function chooseOption(field, attempt) {
+    const options = usableOptions(field);
+    if (!options.length) return null;
+    const preferredText = semanticText({ ...field, placeholder: '' }, 0);
+    if (preferredText && attempt === 0) {
+      const match = options.find((o) => (o.label || '').toLowerCase() === preferredText.toLowerCase() || (o.value || '').toLowerCase() === preferredText.toLowerCase());
+      if (match) return match;
+    }
+    // "Other" often reveals a mandatory free-text box; avoid it on the first try.
+    const ordered = [...options.filter((o) => !/^other\b/i.test(o.label || '')), ...options.filter((o) => /^other\b/i.test(o.label || ''))];
+    return ordered[attempt % ordered.length];
+  }
 
-      const mid = Math.floor((min + max) / 2);
-      return mid.toString();
-    },
+  // ── Files (fixtures only) ───────────────────────────────────────────
+  function sampleFile(field) {
+    const accept = String(field.accept || '').toLowerCase();
+    const minimalPdf = '%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n';
+    if (!accept || /pdf/.test(accept) || accept.includes('*')) {
+      return { fileName: 'practicemode-sample.pdf', mimeType: 'application/pdf', text: minimalPdf };
+    }
+    if (/png|image/.test(accept)) {
+      return { fileName: 'practicemode-sample.png', mimeType: 'image/png', base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' };
+    }
+    if (/txt|text\/plain/.test(accept)) return { fileName: 'practicemode-sample.txt', mimeType: 'text/plain', text: 'Fictional sample file from PracticeMode.' };
+    return { fileName: 'practicemode-sample.pdf', mimeType: 'application/pdf', text: minimalPdf };
+  }
 
-    date(field) {
-      const label = (field.label || field.name || '').toLowerCase();
-      const { min, max } = constraints(field);
-      const chooseDate = (preferred) => {
-        if (min && preferred < min) return min;
-        if (max && preferred > max) return max;
-        return preferred;
-      };
-      if (/birth|dob|born/i.test(label)) {
-        return chooseDate('1995-05-15');
-      }
-      if (/start|begin|from/i.test(label)) return chooseDate('2018-01-15');
-      if (/end|to|through|until/i.test(label)) return chooseDate('2022-12-31');
-      if (/grad/i.test(label)) return chooseDate('2020-05-10');
-      return chooseDate('2020-01-01');
-    },
+  // ── Validation feedback refinement ──────────────────────────────────
+  function refineWithFeedback(value, field, feedback) {
+    if (!feedback || typeof value !== 'string') return value;
+    let out = value;
+    const f = feedback.toLowerCase();
+    const atLeast = /at\s+least\s+(\d+)\s*(characters|chars|letters)/.exec(f) || /minimum\s+(of\s+)?(\d+)\s*char/.exec(f);
+    if (atLeast) {
+      const n = Number(atLeast[1] && /^\d+$/.test(atLeast[1]) ? atLeast[1] : atLeast[2]);
+      while (out.length < n) out += 'x';
+    }
+    const atMost = /(no\s+more\s+than|at\s+most|maximum\s+of|up\s+to)\s+(\d+)\s*(characters|chars)/.exec(f);
+    if (atMost) out = out.slice(0, Number(atMost[2]));
+    if (/(number|digit|numeric)/.test(f) && !/only\s+(letters|alphabet)/.test(f) && !/\d/.test(out)) out += '7';
+    if (/(upper\s*case|capital)/.test(f) && !/[A-Z]/.test(out)) out = out.charAt(0).toUpperCase() + out.slice(1) + (/[A-Z]/.test(out.charAt(0).toUpperCase()) ? '' : 'A');
+    if (/lower\s*case/.test(f) && !/[a-z]/.test(out)) out += 'a';
+    if (/(special\s*char|symbol|punctuation)/.test(f) && !/[^A-Za-z0-9\s]/.test(out)) out += '!';
+    if (/(letters?\s+only|only\s+letters|alphabetic)/.test(f)) out = out.replace(/[^A-Za-z\s]/g, '') || 'Sample';
+    if (/(no\s+spaces|without\s+spaces|cannot\s+contain\s+spaces)/.test(f)) out = out.replace(/\s+/g, '');
+    if (/(alphanumeric|letters?\s*(and|,)\s*numbers)/.test(f)) out = out.replace(/[^A-Za-z0-9_]/g, '') || 'sample1';
+    const digitsExact = /(\d+)[-\s]digit/.exec(f);
+    if (digitsExact && /^\d*$/.test(out.replace(/\D/g, ''))) out = '1234567890123456'.slice(0, Number(digitsExact[1]));
+    return out;
+  }
 
-    'datetime-local'(field) {
-      return '2020-01-01T09:00';
-    },
+  // ── Main entry ──────────────────────────────────────────────────────
+  function manual(reason, blocker) {
+    return { value: null, requiresManual: true, reason, blocker };
+  }
 
-    month(field) {
-      return '2020-01';
-    },
+  function generate(field, ctx = {}) {
+    const attempt = ctx.attempt || 0;
+    const environment = ctx.environment || 'production';
+    const feedback = ctx.feedback || '';
+    const label = field.label || field.name || 'this field';
+    const type = field.type;
+    const hay = hayOf(field);
 
-    week(field) {
-      return '2020-W01';
-    },
-
-    time(field) {
-      return '09:00';
-    },
-
-    url(field) {
-      return 'https://example.com';
-    },
-
-    password(field) {
-      // Do NOT generate real passwords. Return a safe test token.
-      return 'TestPass!2025';
-    },
-
-    search(field) {
-      return 'example search';
-    },
-
-    range(field) {
-      const min = parseFloat(field.min) || 0;
-      const max = parseFloat(field.max) || 100;
-      return Math.floor((min + max) / 2).toString();
-    },
-
-    color(field) {
-      return '#4a90e2';
-    },
-
-    textarea(field) {
-      const label = (field.label || field.name || '').toLowerCase();
-      if (/bio|about|summary|profile/i.test(label)) {
-        return 'I am a test user created by PracticeMode for form extraction purposes.';
-      }
-      if (/cover.?letter|statement/i.test(label)) {
-        return 'This is a sample cover letter generated for form extraction testing. It does not represent a real application.';
-      }
-      if (/reason|why/i.test(label)) {
-        return 'I am interested in this opportunity for professional growth and development.';
-      }
-      const min = parseInt(field.minLength) || 50;
-      const text = 'This is a sample text entry generated for form extraction and testing purposes by PracticeMode.';
-      return text.repeat(Math.ceil(min / text.length)).slice(0, Math.max(min, text.length));
-    },
-
-    select(field) {
-      // Choose first non-empty, non-placeholder option
-      if (field.options && field.options.length > 0) {
-        const validOptions = field.options.filter(
-          (o) => o.value !== '' && !o.disabled && !/select|choose|pick|--/i.test(o.text)
-        );
-        return validOptions.length > 0 ? validOptions[0].value : field.options[0].value;
-      }
-      return '';
-    },
-
-    radio(field) {
-      if (field.options && field.options.length > 0) {
-        return field.options[0].value;
-      }
-      return '';
-    },
-
-    'button-group'(field) {
-      const option = (field.options || []).find(option => !option.disabled);
-      return option?.value || '';
-    },
-
-    checkbox(field) {
-      // Only check if required
-      return field.required ? true : false;
-    },
-
-    file(field) {
-      // Cannot safely generate file uploads — signal manual assistance needed
-      return null;
-    },
-  };
-
-  // ──────────────────────────────────────────────
-  // Public API
-  // ──────────────────────────────────────────────
-
-  /**
-   * Generate a fictional value for a given field descriptor.
-   * Returns { value, requiresManual: false } or { value: null, requiresManual: true, reason: '...' }
-   */
-  function generate(field) {
-    // Identity-sensitive — never auto-generate
-    const label = (field.label || field.name || '').toLowerCase();
-    const sensitivePatterns = [
-      /ssn|social.?security/i,
-      /passport/i,
-      /driver.?licen/i,
-      /tax.?id|ein\b|tin\b/i,
-      /credit.?card|card.?number|cvv|ccv/i,
-      /bank.?account|routing.?number/i,
-      /national.?id/i,
-    ];
-    for (const pat of sensitivePatterns) {
-      if (pat.test(label)) {
-        return {
-          value: null,
-          requiresManual: true,
-          reason: `Field "${field.label}" appears to be identity-sensitive. Manual input required.`,
-        };
-      }
+    if (/one-time-code|verification\s*code|\botp\b|security\s*code\s*sent|captcha/i.test(hay)) {
+      return manual(`"${label}" is a verification code. PracticeMode never fills verification or CAPTCHA fields.`, 'verification');
     }
 
-    // File uploads
-    if (field.type === 'file') {
-      return {
-        value: null,
-        requiresManual: true,
-        reason: `Field "${field.label}" is a file upload. Manual input required.`,
-      };
+    const sensitive = policy.sensitiveKind(field);
+    if (sensitive) {
+      if (environment === 'fixture') return { value: sensitive.testValue, designatedTestValue: true };
+      return manual(`"${label}" looks identity-sensitive or financial (${sensitive.kind.replace(/_/g, ' ')}). Enter it yourself only if you choose to.`, 'sensitive');
     }
 
-    const generatorFn = generators[field.type] || generators.text;
+    if (type === 'file') {
+      if (environment === 'fixture') return { value: sampleFile(field) };
+      return manual(`"${label}" is a file upload. PracticeMode never uploads files to external sites — attach one yourself if you want to continue.`, 'file_upload');
+    }
+
+    if (type === 'password') {
+      if (environment === 'fixture') return { value: attempt ? `SamplePass!${2025 + attempt}` : 'SamplePass!2025' };
+      return manual(`"${label}" is a password field. PracticeMode does not create accounts on external sites.`, 'account_creation');
+    }
+
+    if (type === 'checkbox') {
+      if (environment !== 'fixture' && policy.isAttestation(field)) {
+        return manual(`"${label}" is a legal attestation or consent. Tick it yourself if you agree.`, 'attestation');
+      }
+      return { value: true };
+    }
+
+    if (['select', 'radio', 'button-group', 'checkbox-group'].includes(type)) {
+      if (field.optionsSource === 'typeahead') {
+        const typed = semanticText(field, attempt) || 'a';
+        return { value: typed, typeahead: true };
+      }
+      const option = chooseOption(field, attempt);
+      if (!option) return manual(`No selectable option was found for "${label}".`, 'no_options');
+      return { value: option.value, optionLabel: option.label };
+    }
+
+    const lim = limits(field);
     let value;
-    try {
-      value = generatorFn(field);
-    } catch (e) {
-      return {
-        value: null,
-        requiresManual: true,
-        reason: `Could not generate value for "${field.label}": ${e.message}`,
-      };
-    }
 
-    // A declared pattern is a constraint, not merely metadata. Support the
-    // common patterns that are safe to synthesize; leave unfamiliar patterns
-    // for manual input instead of sending a likely-invalid value.
-    const { pattern } = constraints(field);
-    if (pattern && field.type === 'text') {
-      if (/\\d\{5\}/.test(pattern)) value = '10001';
-      else if (/\\d/.test(pattern) && /[a-z]/i.test(pattern)) {
-        return { value: null, requiresManual: true, reason: `Pattern for "${field.label}" needs manual input.` };
+    switch (type) {
+      case 'email':
+        value = semanticText({ label: 'email' }, attempt);
+        break;
+      case 'tel':
+        value = attempt ? '(212) 555-0199' : '212-555-0100';
+        break;
+      case 'url':
+        value = semanticText(field, attempt) || 'https://example.com';
+        if (!/^https?:/.test(value)) value = 'https://example.com';
+        break;
+      case 'number':
+      case 'range':
+        value = numberValue(field, attempt);
+        break;
+      case 'date':
+        value = clampIso(preferredDate(field, feedback), lim.min, lim.max);
+        break;
+      case 'datetime-local':
+        value = `${clampIso(preferredDate(field, feedback), lim.min && lim.min.slice(0, 10), lim.max && lim.max.slice(0, 10))}T09:00`;
+        break;
+      case 'month':
+        value = preferredDate(field, feedback).slice(0, 7);
+        break;
+      case 'week':
+        value = '2021-W24';
+        break;
+      case 'time':
+        value = '09:30';
+        break;
+      case 'color':
+        value = '#4a90e2';
+        break;
+      case 'textarea':
+      case 'richtext':
+        value = fitLength(/cover\s*letter|statement|essay|why|motivation/i.test(hay)
+          ? `${PARAGRAPH} I am interested in this opportunity to practise completing applications.`
+          : PARAGRAPH, lim);
+        break;
+      default: {
+        // text, search, and anything unrecognised
+        if (looksLikeDateText(field)) {
+          value = formatForPlaceholder(preferredDate(field, feedback), field.placeholder);
+        } else if (/phone|mobile|cell|telephone|\btel\b/i.test(hay)) {
+          value = attempt ? '(212) 555-0199' : '212-555-0100';
+        } else {
+          value = semanticText(field, attempt) ?? (attempt ? `Sample answer ${attempt + 1}` : 'Sample answer');
+        }
       }
     }
 
-    return { value, requiresManual: false };
+    value = refineWithFeedback(String(value), field, feedback);
+
+    if (lim.pattern) {
+      const matched = sampler.generateMatching(lim.pattern, {
+        minLength: lim.minLength,
+        maxLength: lim.maxLength,
+        preferred: [value, value.replace(/\s+/g, ''), value.replace(/[^0-9]/g, ''), value.replace(/[^A-Za-z0-9_]/g, '')],
+        attempt,
+      });
+      if (matched === null) return manual(`Could not produce a value for "${label}" that matches its required format.`, 'pattern');
+      return { value: matched };
+    }
+
+    if (['text', 'search', 'textarea', 'richtext', 'email', 'tel', 'url'].includes(type) || !type) {
+      value = fitLength(value, lim);
+    }
+    return { value };
   }
 
-  /**
-   * Generate values for an array of fields.
-   * Returns array of { field, value, requiresManual, reason? }
-   */
-  function generateForFields(fields) {
-    return fields.map((field) => {
-      const result = generate(field);
-      return { field, ...result };
-    });
-  }
-
-  return { generate, generateForFields };
+  PM.dummyDataGenerator = { generate, refineWithFeedback, usableOptions };
 })();

@@ -1,305 +1,314 @@
 /**
  * content/step_detector.js
- * Detects next-step navigation actions on the current page.
- * Distinguishes safe step navigation from final form submission.
- * Never treats a button as safe merely because it is labeled "Next."
+ * Understands the page around the fields: which buttons advance a step and
+ * which would submit, the step indicator / stepper, step titles, barriers
+ * (CAPTCHA, sign-in, identity verification) and visible validation errors.
+ *
+ * A button is never considered safe merely because it says "Next": labels
+ * that also contain a completion word ("Submit and continue", "Continue to
+ * payment") are classified as ambiguous and require the user.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
+  const U = PM.utils;
+  const policy = PM.safetyPolicy;
 
-window.PracticeMode.stepDetector = (() => {
-  const { isVisible } = window.PracticeMode.utils;
+  const ACTION_SELECTOR = 'button, input[type="submit"], input[type="button"], input[type="image"], [role="button"], a[href]';
+  const NEXT_RE = /\b(next|continue|proceed|forward|go\s+to\s+(the\s+)?next|next\s+step|save\s*(&|and)\s*(continue|next)|weiter|suivant|siguiente|pr[oó]ximo|avanti)\b/i;
+  const BACK_RE = /^\s*[←‹«<]|\b(back|previous|prev|go\s+back|return|edit|start\s+over)\b/i;
+  const REVIEW_RE = /\breview\b/i;
+  const NOISE_CONTAINER = '[class*="carousel" i], [class*="slider" i], [class*="swiper" i], [class*="slick" i], [class*="datepicker" i], [class*="date-picker" i], [class*="calendar" i], nav[aria-label*="pagination" i], [class*="pagination" i], [role="listbox"], [role="menu"], [role="combobox"]';
+  const NOISE_TEXT = /\b(slide|month|year|page\s*\d|photo|image|gallery|cookie|accept\s+all|close|dismiss|menu|search|filter|sort|share|print|help|chat|language)\b/i;
 
-  // ──────────────────────────────────────────────
-  // Label patterns
-  // ──────────────────────────────────────────────
-
-  // ──────────────────────────────────────────────
-  // Label patterns
-  // ──────────────────────────────────────────────
-
-  const NEXT_PATTERNS = [
-    /\bnext\b/i,
-    /\bcontinue\b/i,
-    /\bproceed\b/i,
-    /\bforward\b/i,
-    /\bgo\s+(to\s+)?next/i,
-    /\bstep\s*\d+\b/i,
-    /\bweiter\b/i,       // German: Continue
-    /\bsuivant\b/i,      // French: Next
-    /\bsiguiente\b/i,    // Spanish: Next
-  ];
-
-  const FINAL_PATTERNS = [
-    /\bsubmit\b/i,
-    /\bfinish\b/i,
-    /\bapply(\s+now)?\b/i,
-    /\bconfirm\b/i,
-    /\bpay(\s+now)?\b/i,
-    /\bcomplete\b/i,
-    /\bsend(\s+application)?\b/i,
-    /\bregister\b/i,
-    /\bsign\s*up\b/i,
-    /\bcreate\s+(account|profile)\b/i,
-    /\bplace\s+order\b/i,
-    /\bbuy\s+now\b/i,
-    /\bcheckout\b/i,
-    /\bdone\b/i,
-    /\bfinalize\b/i,
-  ];
-
-  const BACK_PATTERNS = [
-    /\bback\b/i,
-    /\bprevious\b/i,
-    /\bprev\b/i,
-    /\bgo\s+back\b/i,
-    /\breturn\b/i,
-    /^[←«<]/,
-  ];
-
-  // ──────────────────────────────────────────────
-  // Button candidate scoring
-  // ──────────────────────────────────────────────
-
-  function getButtonText(btn) {
-    if (!btn) return '';
-    const text = (btn.innerText || btn.textContent || btn.value || btn.getAttribute('aria-label') || '').trim();
-    return text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ');
+  // ── Actions ─────────────────────────────────────────────────────────
+  function actionText(el) {
+    const raw = el.matches('input') ? el.value || el.getAttribute('aria-label') || el.alt : el.innerText || el.textContent;
+    const text = U.cleanText(raw);
+    const extra = U.cleanText(`${el.getAttribute('aria-label') || ''} ${el.getAttribute('title') || ''}`);
+    return { text: text || extra, combined: U.cleanText(`${text} ${extra}`) };
   }
 
-  function classifyButton(btn) {
-    const rawText = getButtonText(btn);
-    const ariaLabel = (btn.getAttribute('aria-label') || '').trim();
-    const title = (btn.getAttribute('title') || '').trim();
-    const combined = `${rawText} ${ariaLabel} ${title}`.trim();
-    const idAndClass = `${btn.id || ''} ${btn.className || ''} ${btn.getAttribute('data-action') || ''} ${btn.getAttribute('data-step') || ''}`.toLowerCase();
-
-    // 1. Back button check (highest priority to avoid misclassifying back button with arrow)
-    if (BACK_PATTERNS.some((p) => p.test(combined)) || /btn-back|back-btn|prev-btn|go-back/i.test(idAndClass)) {
-      return 'back';
-    }
-
-    // 2. Next / Continue check (takes precedence over generic submit if "continue" or "next" is present)
-    const hasNextWord = NEXT_PATTERNS.some((p) => p.test(combined));
-    const hasNextArrow = /[→›»>]/.test(rawText) && !/back|prev/i.test(combined);
-    const hasNextClass = /btn-next|next-btn|btn-continue|continue-btn|wizard-next|forward-btn/i.test(idAndClass);
-    const hasNextAction = /next|continue|proceed|forward/i.test(btn.getAttribute?.('data-action') || '') || Boolean(btn.hasAttribute ? btn.hasAttribute('data-next') : btn.getAttribute?.('data-next'));
-
-    if (hasNextWord || hasNextClass || hasNextAction || (hasNextArrow && combined.length < 30)) {
-      return 'next';
-    }
-
-    // Review step navigation (e.g. "Review Application →") before submission
-    if (/\breview\b/i.test(combined) && !/\bsubmit\b/i.test(combined)) {
-      return 'next';
-    }
-
-    // 3. Final submission check
-    if (FINAL_PATTERNS.some((p) => p.test(combined)) || /btn-submit|final-submit|submit-btn/i.test(idAndClass)) {
-      return 'final';
-    }
-
-    // Check data attributes
-    const dataAction = btn.getAttribute('data-action') || btn.getAttribute('data-step') || '';
-    if (/next|continue|proceed/i.test(dataAction)) return 'next';
-    if (/submit|finish|final/i.test(dataAction)) return 'final';
-
-    // 4. Form submit type context
-    if (btn.type === 'submit') {
-      const form = btn.closest('form');
-      if (form) {
-        const formClasses = `${form.className} ${form.getAttribute('data-type') || ''} ${form.id || ''}`.toLowerCase();
-        if (/wizard|multi.?step|step/i.test(formClasses)) return 'next_submit';
-      }
-      return 'ambiguous_submit';
-    }
-
-    return 'unknown';
+  function isDisabled(el) {
+    return el.disabled || el.getAttribute('aria-disabled') === 'true' || /\bdisabled\b/.test(el.className?.toString() || '');
   }
 
-  // ──────────────────────────────────────────────
-  // Tab/accordion navigation
-  // ──────────────────────────────────────────────
+  function classify(el) {
+    const { text, combined } = actionText(el);
+    const meta = `${el.id || ''} ${el.className?.toString() || ''} ${el.getAttribute('data-action') || ''} ${el.getAttribute('data-testid') || ''} ${el.name || ''}`.toLowerCase();
+    if (el.matches('input[type="reset"], button[type="reset"]')) return 'other';
 
-  function detectTabs() {
-    const tabSelectors = [
-      '[role="tab"]',
-      '[class*="tab-item"]',
-      '[class*="wizard-step"]',
-      '[class*="step-indicator"]',
-    ];
+    if (BACK_RE.test(combined) || /\b(btn-back|back-btn|prev-btn|btn-prev|go-back|previous)\b/.test(meta)) return 'back';
 
-    const tabs = [];
-    for (const sel of tabSelectors) {
-      const found = Array.from(document.querySelectorAll(sel)).filter(isVisible);
-      if (found.length > 1) {
-        tabs.push(...found);
-        break;
-      }
-    }
-    return tabs;
+    // The visible label decides; class names and data attributes are only
+    // used when the label says nothing (they are often copy-pasted styling).
+    const textFinal = policy.FINAL_ACTION_RE.test(combined);
+    const textNext = NEXT_RE.test(combined) || (/[→›»]\s*$/.test(text) && text.length < 30 && !textFinal);
+    const metaFinal = /\b(btn-submit|submit-btn|final-submit|submit-application)\b/.test(meta);
+    const metaNext = /\b(btn-next|next-btn|wizard-next|step-next|btn-continue|continue-btn|next-step)\b/.test(meta) ||
+      /\b(next|continue|proceed)\b/.test(el.getAttribute('data-action') || '');
+
+    if (textNext && textFinal) return 'ambiguous';
+    if (textFinal) return 'final';
+    if (textNext) return 'next';
+    if (REVIEW_RE.test(combined)) return 'next';
+    if (metaNext && metaFinal) return 'ambiguous';
+    if (metaFinal) return 'final';
+    if (metaNext) return 'next';
+    if (el.matches('a[href]')) return 'other';
+    if (el.form && (el.type === 'submit' || el.type === 'image')) return 'ambiguous';
+    return 'other';
   }
 
-  // ──────────────────────────────────────────────
-  // Validation error detection
-  // ──────────────────────────────────────────────
-
-  function detectValidationErrors() {
-    const errorSelectors = [
-      '[class*="error"]:not(style)',
-      '[class*="invalid"]:not(style)',
-      '[aria-invalid="true"]',
-      '.field-error',
-      '.validation-error',
-      '.form-error',
-      '[role="alert"]',
-    ];
-
-    const errors = [];
-    for (const sel of errorSelectors) {
-      const els = Array.from(document.querySelectorAll(sel)).filter(isVisible);
-      for (const el of els) {
-        const text = el.innerText.trim();
-        if (text && text.length < 500) errors.push(text);
-      }
-    }
-    return [...new Set(errors)];
+  function commonAncestor(elements) {
+    const els = elements.filter((e) => e?.isConnected);
+    if (!els.length) return null;
+    let node = els[0];
+    while (node && !els.every((e) => node.contains(e))) node = node.parentElement;
+    return node;
   }
 
-  // ──────────────────────────────────────────────
-  // Progression barrier detection
-  // ──────────────────────────────────────────────
-
-  function detectBarriers() {
-    const barriers = [];
-
-    // CAPTCHA
-    const captchaIndicators = [
-      '[class*="captcha"]',
-      '[class*="recaptcha"]',
-      '#g-recaptcha',
-      'iframe[src*="recaptcha"]',
-      'iframe[src*="hcaptcha"]',
-    ];
-    for (const sel of captchaIndicators) {
-      if (document.querySelector(sel)) {
-        barriers.push({ type: 'captcha', message: 'CAPTCHA detected — manual completion required.' });
-        break;
-      }
-    }
-
-    // Auth wall
-    if (document.querySelector('[class*="login-wall"], [class*="auth-required"], #login-modal')) {
-      barriers.push({ type: 'auth', message: 'Authentication required — manual login needed.' });
-    }
-
-    // Identity verification
-    if (/identity\s*verification|verify\s*your\s*identity/i.test(document.body.innerText)) {
-      barriers.push({ type: 'identity_verification', message: 'Identity verification required — manual completion required.' });
-    }
-
-    return barriers;
+  function fieldElements(fields) {
+    return (fields || []).map((f) => f._proxy || f._el).filter(Boolean);
   }
 
-  // ──────────────────────────────────────────────
-  // Primary detection API
-  // ──────────────────────────────────────────────
-
-  /**
-   * Scan the page and find all navigation-relevant buttons.
-   */
-  function detectNavigationElements() {
-    const candidates = Array.from(
-      document.querySelectorAll(
-        'button, input[type="submit"], input[type="button"], [role="button"]'
-      )
-    ).filter(isVisible);
-
-    const result = {
-      nextButtons: [],
-      finalButtons: [],
-      backButtons: [],
-      ambiguousButtons: [],
-      tabs: detectTabs(),
-      barriers: detectBarriers(),
-      validationErrors: detectValidationErrors(),
-    };
-
-    for (const btn of candidates) {
-      const category = classifyButton(btn);
-      switch (category) {
-        case 'next':
-        case 'next_submit':
-          result.nextButtons.push(btn);
-          break;
-        case 'final':
-          result.finalButtons.push(btn);
-          break;
-        case 'back':
-          result.backButtons.push(btn);
-          break;
-        case 'ambiguous_submit':
-        case 'unknown':
-          result.ambiguousButtons.push({ button: btn, text: getButtonText(btn), category });
-          break;
-      }
+  /** Every visible action on the page with its category and a relevance score. */
+  function findActions(fields) {
+    const els = fieldElements(fields);
+    const container = commonAncestor(els);
+    const forms = new Set(els.map((e) => e.form || e.closest?.('form')).filter(Boolean));
+    const actions = [];
+    for (const el of U.deepQueryAll(document, ACTION_SELECTOR)) {
+      if (!U.isVisible(el) || el.closest(NOISE_CONTAINER)) continue;
+      if (el.matches('[data-option], [aria-haspopup]')) continue;
+      const { text, combined } = actionText(el);
+      if (!combined) continue;
+      const category = classify(el);
+      if (el.matches('a[href]') && category === 'other') continue;
+      if (category === 'other' && NOISE_TEXT.test(combined)) continue;
+      if ((category === 'next' || category === 'ambiguous') && NOISE_TEXT.test(combined) && !NEXT_RE.test(text)) continue;
+      let score = 0;
+      if (container && container.contains(el)) score += 3;
+      if (el.form && forms.has(el.form)) score += 3;
+      if (container?.parentElement?.contains(el)) score += 1;
+      if (/^(next|continue)\b/i.test(text)) score += 1;
+      if (/\b(primary|main|cta)\b/i.test(el.className?.toString() || '')) score += 1;
+      if (isDisabled(el)) score -= 2;
+      actions.push({ el, text: text.slice(0, 80), category, score, disabled: isDisabled(el) });
     }
-
-    return result;
+    return actions;
   }
 
-  /**
-   * Detect step indicator to understand how many total steps exist.
-   */
-  function detectStepIndicator() {
-    // Common step counter patterns
-    const indicators = [
-      { pattern: /step\s*(\d+)\s*of\s*(\d+)/i, source: document.body.innerText },
-    ];
+  function summarize(actions) {
+    const by = (c) => actions.filter((a) => a.category === c).sort((a, b) => b.score - a.score);
+    return { next: by('next'), final: by('final'), back: by('back'), ambiguous: by('ambiguous'), other: by('other') };
+  }
 
-    for (const { pattern, source } of indicators) {
-      const match = source.match(pattern);
-      if (match) {
-        return { current: parseInt(match[1]), total: parseInt(match[2]) };
-      }
+  // ── Step indicator & stepper ────────────────────────────────────────
+  const STEPPER_SELECTOR = '[role="tablist"], ol[class*="step" i], ul[class*="step" i], [class*="stepper" i], [class*="progress-steps" i], [class*="wizard-steps" i], [class*="steps-nav" i], nav[aria-label*="step" i], [class*="breadcrumb" i][class*="step" i]';
+
+  function cleanStepTitle(text) {
+    return U.cleanText(text).replace(/^(step\s*)?\d+\s*[.):\-–—]?\s*/i, '').replace(/\s*(✓|✔|completed|current)$/i, '').slice(0, 80);
+  }
+
+  function detectStepper() {
+    for (const host of U.deepQueryAll(document, STEPPER_SELECTOR)) {
+      if (!U.isVisible(host)) continue;
+      let items = Array.from(host.querySelectorAll(':scope [role="tab"]'));
+      if (items.length < 2) items = Array.from(host.querySelectorAll(':scope > li, :scope > * > li'));
+      if (items.length < 2) items = Array.from(host.children).filter((c) => /step|tab/i.test(c.className?.toString() || ''));
+      if (items.length < 2 || items.length > 15) continue;
+      const titles = items.map((i) => cleanStepTitle(i.textContent));
+      if (titles.some((t) => !t || t.length > 60)) continue;
+      const activeIndex = items.findIndex((i) => i.getAttribute('aria-selected') === 'true' || i.getAttribute('aria-current') === 'step' ||
+        i.getAttribute('aria-current') === 'true' || /\b(active|current|is-active|selected)\b/i.test(i.className?.toString() || ''));
+      return { titles, activeIndex };
     }
-
-    // Progress bar with aria attributes
-    const progressBar = document.querySelector('[role="progressbar"], [class*="progress"]');
-    if (progressBar) {
-      const now = progressBar.getAttribute('aria-valuenow');
-      const max = progressBar.getAttribute('aria-valuemax');
-      if (now && max) {
-        return { current: parseInt(now), total: parseInt(max) };
-      }
-    }
-
     return null;
   }
 
-  /**
-   * Check if the current page looks like a final review/confirmation page.
-   */
-  function isFinalReviewPage() {
-    const reviewKeywords = /review\s*your|summary|confirmation|you('re|\s+are)\s+almost|final\s*step/i;
-    const heading = document.querySelector('h1, h2');
-    if (heading && reviewKeywords.test(heading.innerText)) return true;
-
-    const navEls = detectNavigationElements();
-    // If there are final submit buttons and no next buttons, likely final page
-    if (navEls.finalButtons.length > 0 && navEls.nextButtons.length === 0) return true;
-
-    return false;
+  function detectStepCounter() {
+    const re = /\bstep\s*(\d+)\s*(?:of|\/)\s*(\d+)\s*(?:[—–\-:·|]\s*(.+))?/i;
+    const nodes = U.deepQueryAll(document, 'p, span, div, h1, h2, h3, h4, small, li, legend, label, strong');
+    let best = null;
+    for (const node of nodes) {
+      if (node.children.length > 3) continue;
+      const text = U.cleanText(node.textContent);
+      if (text.length > 120) continue;
+      const m = re.exec(text);
+      if (m && U.isVisible(node)) {
+        if (!best || text.length < best.text.length) best = { text, current: Number(m[1]), total: Number(m[2]), title: m[3] ? cleanStepTitle(m[3]) : null };
+      }
+    }
+    if (best) return best;
+    const bar = U.deepQueryAll(document, '[role="progressbar"][aria-valuemax]').find(U.isVisible);
+    if (bar) {
+      const max = Number(bar.getAttribute('aria-valuemax'));
+      const now = Number(bar.getAttribute('aria-valuenow'));
+      if (max > 1 && max <= 20 && Number.isFinite(now)) return { current: now, total: max, title: null };
+    }
+    return null;
   }
 
-  return {
-    detectNavigationElements,
+  function detectStepIndicator() {
+    const counter = detectStepCounter();
+    const stepper = detectStepper();
+    const total = Math.max(counter?.total || 0, stepper?.titles.length || 0) || null;
+    const current = counter?.current || (stepper && stepper.activeIndex >= 0 ? stepper.activeIndex + 1 : null);
+    const activeTitle = (stepper && stepper.activeIndex >= 0 ? stepper.titles[stepper.activeIndex] : null) || counter?.title || null;
+    return { total, current, titles: stepper?.titles || [], activeTitle };
+  }
+
+  // ── Titles ──────────────────────────────────────────────────────────
+  function formTitle() {
+    for (const sel of ['h1', '[class*="form-title" i]', '[class*="page-title" i]', 'h2']) {
+      const el = U.deepQueryAll(document, sel).find((e) => U.isVisible(e) && U.ownText(e));
+      if (el) return U.ownText(el).slice(0, 120);
+    }
+    return U.cleanText(document.title).slice(0, 120) || location.hostname || 'Untitled form';
+  }
+
+  function stepTitle(fields, indicator, theFormTitle) {
+    const title = rawStepTitle(fields, indicator, theFormTitle);
+    // Drop decorative leading symbols ("✅ Review Complete").
+    return title ? title.replace(/^[^\p{L}\p{N}]+/u, '').trim() || title : null;
+  }
+
+  function rawStepTitle(fields, indicator, theFormTitle) {
+    if (indicator?.activeTitle) return indicator.activeTitle;
+    const container = commonAncestor(fieldElements(fields));
+    const headingSel = 'h1, h2, h3, h4, legend, [class*="step-title" i], [class*="section-title" i], [class*="title" i], [role="heading"]';
+    const isUseful = (h) => {
+      const text = U.ownText(h);
+      return text && text !== theFormTitle && text.length < 100 && !/subtitle|subheading|description/i.test(h.className?.toString() || '') &&
+        !h.querySelector('input, select, textarea') && U.isVisible(h);
+    };
+    if (container) {
+      const inside = Array.from(container.querySelectorAll(headingSel)).find(isUseful);
+      if (inside) return U.ownText(inside);
+      // Nearest heading before the fields (e.g. a page section header).
+      const before = U.deepQueryAll(document, headingSel).filter((h) => U.domOrderCompare(h, container) < 0 && isUseful(h));
+      if (before.length) return U.ownText(before[before.length - 1]);
+    } else {
+      const any = U.deepQueryAll(document, headingSel).find(isUseful);
+      if (any) return U.ownText(any);
+    }
+    return null;
+  }
+
+  // ── Barriers ────────────────────────────────────────────────────────
+  const CAPTCHA_SELECTOR = 'iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], iframe[title*="captcha" i], .g-recaptcha, .h-captcha, .cf-turnstile, [data-sitekey], [class*="captcha" i], [id*="captcha" i]';
+
+  function detectBarriers(fields) {
+    const barriers = [];
+    const captcha = U.deepQueryAll(document, CAPTCHA_SELECTOR).find((el) => !el.closest('.grecaptcha-badge') && U.isVisible(el));
+    if (captcha) barriers.push({ type: 'captcha', message: 'A CAPTCHA is shown. PracticeMode never solves or bypasses CAPTCHAs — complete it yourself to continue.' });
+
+    const password = (fields || []).some((f) => f.type === 'password');
+    const signInButton = U.deepQueryAll(document, 'button, input[type="submit"], [role="button"]')
+      .some((b) => U.isVisible(b) && /^(sign|log)\s*in\b/i.test(actionText(b).text));
+    if (password && signInButton) barriers.push({ type: 'auth', message: 'This step asks you to sign in. PracticeMode does not sign in or bypass authentication.' });
+
+    const headingText = U.deepQueryAll(document, 'h1, h2, h3, h4, legend, p')
+      .filter((n) => U.isVisible(n) && n.textContent.length < 300)
+      .map((n) => n.textContent).join(' ');
+    if (/verify\s+your\s+identity|identity\s+verification|upload\s+(a\s+)?(photo\s+)?(of\s+your\s+)?(government\s+)?id\b/i.test(headingText)) {
+      barriers.push({ type: 'identity_verification', message: 'This step requires identity verification, which PracticeMode never automates.' });
+    }
+    return barriers;
+  }
+
+  // ── Validation feedback ─────────────────────────────────────────────
+  const ERROR_SELECTOR = '[role="alert"], [aria-live="assertive"], .error, .errors, .error-msg, .error-message, .field-error, .invalid-feedback, .validation-error, .validation-message, .form-error, .help-block.error, [class*="error" i], [class*="invalid" i], [id*="error" i]';
+
+  /**
+   * Visible validation messages, each linked to a field key when possible.
+   * Returns { messages: string[], byKey: Map<fieldKey, message>, invalidKeys: Set }.
+   */
+  function validationFeedback(fields) {
+    const byKey = new Map();
+    const invalidKeys = new Set();
+    const messages = [];
+    const fieldContainers = (fields || []).map((f) => ({
+      field: f,
+      container: (f._proxy || f._el)?.closest?.('.field, .form-group, .form-field, [class*="field" i], [class*="form-row" i], fieldset, li') || null,
+    }));
+
+    for (const f of fields || []) {
+      const el = f._el;
+      if (el?.getAttribute?.('aria-invalid') === 'true' || PM.fieldPopulator.isNativelyInvalid(f)) invalidKeys.add(f._key);
+      if (el?.validationMessage && el.willValidate && !el.validity?.valid) byKey.set(f._key, el.validationMessage);
+    }
+
+    for (const node of U.deepQueryAll(document, ERROR_SELECTOR)) {
+      if (!U.isVisible(node) || node.matches('input, select, textarea, button, form, body, html')) continue;
+      if (node.querySelector('input, select, textarea')) continue;
+      const text = U.ownText(node);
+      if (!text || text.length > 300) continue;
+      if (messages.includes(text)) continue;
+      messages.push(text);
+
+      const describedOwner = (fields || []).find((f) => {
+        const ids = `${f._el?.getAttribute?.('aria-describedby') || ''} ${f._el?.getAttribute?.('aria-errormessage') || ''}`.split(/\s+/);
+        return node.id && ids.includes(node.id);
+      });
+      const containerOwner = describedOwner ? null : fieldContainers.find(({ container }) => container && container.contains(node))?.field;
+      const owner = describedOwner || containerOwner;
+      if (owner) {
+        byKey.set(owner._key, text);
+        invalidKeys.add(owner._key);
+      }
+    }
+    return { messages, byKey, invalidKeys };
+  }
+
+  // ── Step identity ───────────────────────────────────────────────────
+  function stepIdentity(fields, title) {
+    const actions = findActions(fields).filter((a) => a.category !== 'other').map((a) => a.text).sort().join('|');
+    return {
+      path: `${location.pathname}${location.hash && location.hash.length < 40 ? location.hash : ''}`,
+      title: title || '',
+      keys: (fields || []).map((f) => f._key).sort(),
+      actions,
+    };
+  }
+
+  function jaccard(a, b) {
+    const A = new Set(a);
+    const B = new Set(b);
+    if (!A.size && !B.size) return 1;
+    let inter = 0;
+    for (const x of A) if (B.has(x)) inter++;
+    return inter / (A.size + B.size - inter);
+  }
+
+  /**
+   * Whether two identities describe the same step. Revealing a conditional
+   * question keeps most fields in place, so it is the same step; moving to a
+   * new step replaces most of them.
+   */
+  function sameStep(a, b, threshold = 0.5) {
+    if (!a || !b) return false;
+    if (a.path !== b.path) return false;
+    const j = jaccard(a.keys, b.keys);
+    if (!a.keys.length && !b.keys.length) return a.title === b.title && a.actions === b.actions;
+    if (a.title && b.title && a.title !== b.title && j < 0.8) return false;
+    return j >= threshold;
+  }
+
+  PM.stepDetector = {
+    findActions,
+    summarize,
+    classify,
     detectStepIndicator,
-    detectValidationErrors,
+    formTitle,
+    stepTitle,
     detectBarriers,
-    isFinalReviewPage,
-    classifyButton,
-    getButtonText,
-    detectTabs,
+    validationFeedback,
+    stepIdentity,
+    sameStep,
+    jaccard,
+    commonAncestor,
+    isDisabled,
   };
 })();

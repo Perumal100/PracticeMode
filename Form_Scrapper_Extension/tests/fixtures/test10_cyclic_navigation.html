@@ -26,7 +26,7 @@
 <body>
 <div class="card">
   <h1>Cyclic Navigation Test</h1>
-  <p class="subtitle">Step A → Step B → Step A (loop). Tests loop detection — extension must detect and stop.</p>
+  <p class="subtitle">Step A → Step B → Step A (loop). Step B's Next button returns to A; the extension must detect the loop and stop.</p>
 
   <div class="step active" id="sA">
     <div class="cycle-indicator" id="visitCounter">Current: Step A | Visits to A: <span id="countA">1</span></div>
@@ -57,7 +57,7 @@
     </div>
     <div class="btn-row">
       <button class="btn btn-back" onclick="goA()">← Back to A (Loop!)</button>
-      <button class="btn btn-warning" onclick="alert('PracticeMode: Would cycle back. Blocked.')">Next (Cycles to A)</button>
+      <button class="btn btn-warning" onclick="goA()">Next →</button>
     </div>
   </div>
 </div>

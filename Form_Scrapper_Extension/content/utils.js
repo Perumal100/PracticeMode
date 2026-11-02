@@ -1,224 +1,284 @@
 /**
  * content/utils.js
- * Shared utility functions used across all content script modules.
+ * Shared DOM helpers used by every content-script module.
+ * Shadow-DOM aware: open shadow roots are traversed in document order.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
 
-window.PracticeMode.utils = (() => {
-  /**
-   * Wait for a DOM element matching selector to appear within timeout ms.
-   */
-  function waitForElement(selector, timeout = 5000, root = document) {
-    return new Promise((resolve, reject) => {
-      const existing = root.querySelector(selector);
-      if (existing) return resolve(existing);
+  // Our own UI (copilot panel, highlight overlay) is marked with this attribute
+  // and must never be treated as part of the page's form.
+  const IGNORE_ATTR = 'data-pm-ignore';
 
-      const observer = new MutationObserver(() => {
-        const el = root.querySelector(selector);
-        if (el) {
-          observer.disconnect();
-          resolve(el);
-        }
-      });
-      observer.observe(root.body || root, { childList: true, subtree: true });
-
-      setTimeout(() => {
-        observer.disconnect();
-        reject(new Error(`Timeout waiting for: ${selector}`));
-      }, timeout);
-    });
-  }
-
-  /**
-   * Wait for meaningful DOM change after an action.
-   * Resolves when the DOM stops mutating for stableMs ms.
-   */
-  function waitForDOMStability(stableMs = 600, timeout = 8000) {
-    return new Promise((resolve) => {
-      let timer = null;
-      let elapsed = 0;
-      const interval = 50;
-
-      const observer = new MutationObserver(() => {
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          observer.disconnect();
-          resolve('stable');
-        }, stableMs);
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        characterData: true,
-      });
-
-      // Seed the stability timer
-      timer = setTimeout(() => {
-        observer.disconnect();
-        resolve('stable');
-      }, stableMs);
-
-      // Hard cap
-      setTimeout(() => {
-        observer.disconnect();
-        clearTimeout(timer);
-        resolve('timeout');
-      }, timeout);
-    });
-  }
-
-  /**
-   * Dispatch framework-compatible native input events.
-   */
-  function triggerNativeEvents(element, value) {
-    if (!element) return;
-    try {
-      let proto = window.HTMLInputElement.prototype;
-      if (element instanceof HTMLTextAreaElement) {
-        proto = window.HTMLTextAreaElement.prototype;
-      } else if (element instanceof HTMLSelectElement) {
-        proto = window.HTMLSelectElement.prototype;
-      }
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (nativeInputValueSetter && nativeInputValueSetter.set) {
-        nativeInputValueSetter.set.call(element, value);
-      } else {
-        element.value = value;
-      }
-    } catch (e) {
-      try { element.value = value; } catch (_) {}
-    }
-
-    ['input', 'change', 'blur', 'keyup'].forEach((eventName) => {
-      try {
-        element.dispatchEvent(
-          new Event(eventName, { bubbles: true, cancelable: true })
-        );
-      } catch (_) {}
-    });
-  }
-
-  /**
-   * Safely get visible text from an element or its associated label.
-   */
-  function getLabel(element) {
-    // aria-label
-    if (element.getAttribute('aria-label')) return element.getAttribute('aria-label').trim();
-
-    // aria-labelledby
-    const labelledById = element.getAttribute('aria-labelledby');
-    if (labelledById) {
-      const labelEl = document.getElementById(labelledById);
-      if (labelEl) return labelEl.innerText.trim();
-    }
-
-    // <label for="id">
-    if (element.id) {
-      const label = document.querySelector(`label[for="${CSS.escape(element.id)}"]`);
-      if (label) return label.innerText.trim();
-    }
-
-    // Closest wrapping label
-    const closestLabel = element.closest('label');
-    if (closestLabel) {
-      return closestLabel.innerText.replace(element.value || '', '').trim();
-    }
-
-    // Component libraries commonly put a question label alongside an input
-    // that intentionally has no id/name (for example, date pickers and
-    // autocomplete inputs). Prefer that question label over a placeholder.
-    const fieldContainer = element.closest(
-      '[data-field-path], [data-field-entry-id], .form-group, .field-wrapper, [class*="fieldEntry"], [class*="field-entry"]'
-    );
-    if (fieldContainer) {
-      const labels = Array.from(fieldContainer.querySelectorAll('label'));
-      const questionLabel = labels.find(label =>
-        !label.contains(element) &&
-        !label.querySelector('input, select, textarea') &&
-        (label.className?.toString().toLowerCase().includes('question') ||
-          label.className?.toString().toLowerCase().includes('heading') ||
-          label.getAttribute('for') || labels.length === 1)
-      );
-      if (questionLabel?.innerText?.trim()) return questionLabel.innerText.trim();
-    }
-
-    // Placeholder
-    if (element.placeholder) return element.placeholder.trim();
-
-    // Name attribute as fallback
-    if (element.name) return element.name.replace(/[_\-]/g, ' ').trim();
-
-    return '';
-  }
-
-  /**
-   * Check if an element is visible and interactable.
-   */
-  function isVisible(element) {
-    if (!element) return false;
-    if (element.closest('[hidden], [aria-hidden="true"]')) return false;
-
-    const style = window.getComputedStyle(element);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
-
-    // Custom checkboxes, radio buttons, and file inputs are often styled with opacity: 0
-    // or tiny width/height while their parent container or label is visible.
-    const isSpecialInput = ['radio', 'checkbox', 'file'].includes(element.type);
-    if (isSpecialInput) {
-      const parent = element.parentElement;
-      if (parent) {
-        const parentStyle = window.getComputedStyle(parent);
-        if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') return false;
-        const parentRect = parent.getBoundingClientRect();
-        if (parentRect.width > 0 && parentRect.height > 0) return true;
-      }
-    }
-
-    if (style.opacity === '0' && !isSpecialInput) return false;
-    const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  }
-
-  /**
-   * Get a stable fingerprint for an element to detect duplicate fields.
-   */
-  function fieldFingerprint(field) {
-    return `${field.label}__${field.type}__${field.name || ''}`.toLowerCase().replace(/\s+/g, '_');
-  }
-
-  /**
-   * Deep clone a plain object safely (no circular refs).
-   */
-  function deepClone(obj) {
-    return JSON.parse(JSON.stringify(obj));
-  }
-
-  /**
-   * Slugify a string for use as an ID or key.
-   */
-  function slugify(str) {
-    return (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  }
-
-  /**
-   * Sleep for ms milliseconds.
-   */
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  return {
-    waitForElement,
-    waitForDOMStability,
-    triggerNativeEvents,
-    getLabel,
-    isVisible,
-    fieldFingerprint,
-    deepClone,
-    slugify,
+  function isOwnUi(el) {
+    return Boolean(el?.closest?.(`[${IGNORE_ATTR}]`));
+  }
+
+  /**
+   * querySelectorAll that also descends into open shadow roots, preserving
+   * document order (a host's shadow content is visited where the host sits).
+   */
+  function deepQueryAll(root, selector) {
+    const out = [];
+    const visit = (node) => {
+      const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
+      let current = walker.currentNode;
+      if (current.nodeType !== Node.ELEMENT_NODE) current = walker.nextNode();
+      while (current) {
+        if (current.hasAttribute(IGNORE_ATTR)) {
+          // Skip our own UI subtree entirely.
+          let next = walker.nextSibling();
+          while (!next && walker.parentNode()) next = walker.nextSibling();
+          current = next;
+          continue;
+        }
+        if (current.matches(selector)) out.push(current);
+        if (current.shadowRoot) visit(current.shadowRoot);
+        current = walker.nextNode();
+      }
+    };
+    visit(root || document);
+    return out;
+  }
+
+  function byIdInScope(el, id) {
+    if (!id) return null;
+    const scope = el?.getRootNode?.() || document;
+    return (scope.getElementById ? scope.getElementById(id) : null) || document.getElementById(id);
+  }
+
+  function cleanText(text) {
+    return String(text || '')
+      .replace(/ /g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** Visible text of an element without the text of nested form controls. */
+  function ownText(el) {
+    if (!el) return '';
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('input, select, textarea, option, datalist, script, style, [aria-hidden="true"]').forEach((n) => n.remove());
+    // innerText on a detached clone has no layout, so textContent is used.
+    return cleanText(clone.textContent);
+  }
+
+  /**
+   * Strip required markers and trailing punctuation from a label.
+   * Returns { text, hadRequiredMarker }.
+   */
+  function normalizeLabel(raw) {
+    let text = cleanText(raw);
+    // An asterisk anywhere in a field label is a required marker in practice
+    // ("Bio * (min 20 chars)").
+    const hadRequiredMarker = /\*|\(required\)|\brequired\b$/i.test(text);
+    text = cleanText(
+      text
+        .replace(/\(required\)/gi, ' ')
+        .replace(/\*+/g, ' ')
+    ).replace(/\s*[:：]\s*$/, '');
+    return { text, hadRequiredMarker };
+  }
+
+  function isVisible(el) {
+    if (!el || !el.isConnected) return false;
+    if (el.closest('[hidden], [aria-hidden="true"]') && !el.matches('input[type="file"], input[type="radio"], input[type="checkbox"]')) {
+      return false;
+    }
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    // Hidden ancestors (display:none) make the element unrendered.
+    if (el.getClientRects().length === 0) {
+      return false;
+    }
+    if (style.opacity === '0' && !isToggleLike(el)) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function isToggleLike(el) {
+    return el.matches?.('input[type="radio"], input[type="checkbox"], input[type="file"]');
+  }
+
+  /**
+   * Custom radios/checkboxes/file inputs are often visually hidden (opacity 0,
+   * 1px, clip) while their label is shown. Treat them as visible when a label or
+   * the wrapping container is visible.
+   */
+  function isEffectivelyVisible(el) {
+    if (isVisible(el)) return true;
+    if (!isToggleLike(el)) return false;
+    const labels = Array.from(el.labels || []);
+    if (labels.some(isVisible)) return true;
+    const parent = el.parentElement;
+    return Boolean(parent && parent.getClientRects().length && isVisible(parent));
+  }
+
+  function domOrderCompare(a, b) {
+    if (a === b) return 0;
+    const pos = a.compareDocumentPosition(b);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+    if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+    // Different trees (shadow roots): fall back to host comparison.
+    const hostA = a.getRootNode().host;
+    const hostB = b.getRootNode().host;
+    if (hostA && hostA !== a) return domOrderCompare(hostA, b);
+    if (hostB && hostB !== b) return domOrderCompare(a, hostB);
+    return 0;
+  }
+
+  function slugify(str) {
+    return String(str || '')
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 48);
+  }
+
+  /** origin + path only — query strings and fragments can carry tokens or PII. */
+  function safeUrl(href) {
+    try {
+      const url = new URL(href, location.href);
+      if (url.protocol === 'file:') return `file://${url.pathname}`;
+      return `${url.origin}${url.pathname}`;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /**
+   * Resolves when no DOM mutation has happened for `quietMs`, or after `timeout`.
+   */
+  function waitForDOMStability(quietMs = 400, timeout = 4000) {
+    return new Promise((resolve) => {
+      let quietTimer = null;
+      const done = (result) => {
+        observer.disconnect();
+        clearTimeout(quietTimer);
+        clearTimeout(hardTimer);
+        resolve(result);
+      };
+      const observer = new MutationObserver((mutations) => {
+        if (mutations.every((m) => isOwnUi(m.target))) return;
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(() => done('stable'), quietMs);
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true, characterData: true });
+      quietTimer = setTimeout(() => done('stable'), quietMs);
+      const hardTimer = setTimeout(() => done('timeout'), timeout);
+    });
+  }
+
+  async function waitUntil(predicate, timeout = 3000, interval = 100) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      try {
+        const value = await predicate();
+        if (value) return value;
+      } catch (_) { /* keep polling */ }
+      await sleep(interval);
+    }
+    return null;
+  }
+
+  function setNativeValue(el, value) {
+    const proto =
+      el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
+        : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype
+          : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (descriptor?.set) descriptor.set.call(el, value);
+    else el.value = value;
+  }
+
+  function fire(el, type, init = {}) {
+    let event;
+    if (/^key/.test(type)) event = new KeyboardEvent(type, { bubbles: true, cancelable: true, composed: true, ...init });
+    else if (/^(mouse|click|pointer)/.test(type)) {
+      const Ctor = type.startsWith('pointer') && typeof PointerEvent === 'function' ? PointerEvent : MouseEvent;
+      event = new Ctor(type, { bubbles: true, cancelable: true, composed: true, view: window, button: 0, ...init });
+    } else if (type === 'input') event = new InputEvent('input', { bubbles: true, cancelable: false, composed: true, ...init });
+    else event = new Event(type, { bubbles: true, cancelable: true, composed: true, ...init });
+    el.dispatchEvent(event);
+  }
+
+  /** A realistic pointer click sequence for custom widgets that ignore .click(). */
+  function pointerClick(el) {
+    fire(el, 'pointerdown');
+    fire(el, 'mousedown');
+    fire(el, 'pointerup');
+    fire(el, 'mouseup');
+    if (typeof el.click === 'function') el.click();
+    else fire(el, 'click');
+  }
+
+  function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(36);
+  }
+
+  /**
+   * Briefly outline elements on the page so the user can see what was
+   * captured. Purely visual; uses its own shadow root and never touches page
+   * styles.
+   */
+  function flashElements(elements, color = '#6366f1', duration = 1400) {
+    try {
+      const rects = elements
+        .filter((el) => el?.isConnected)
+        .map((el) => (isVisible(el) ? el : el.labels?.[0] || el.parentElement))
+        .filter(Boolean)
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0);
+      if (!rects.length) return;
+      const host = document.createElement('div');
+      host.setAttribute(IGNORE_ATTR, 'highlight');
+      host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646;';
+      const root = host.attachShadow({ mode: 'open' });
+      for (const r of rects) {
+        const box = document.createElement('div');
+        box.style.cssText = `position:fixed;left:${r.left - 3}px;top:${r.top - 3}px;width:${r.width + 6}px;height:${r.height + 6}px;` +
+          `border:2px solid ${color};border-radius:6px;box-shadow:0 0 0 4px ${color}33;transition:opacity .4s;`;
+        root.appendChild(box);
+      }
+      document.documentElement.appendChild(host);
+      setTimeout(() => {
+        root.querySelectorAll('div').forEach((d) => (d.style.opacity = '0'));
+        setTimeout(() => host.remove(), 450);
+      }, duration);
+    } catch (_) { /* decoration only */ }
+  }
+
+  PM.utils = {
+    IGNORE_ATTR,
     sleep,
+    isOwnUi,
+    deepQueryAll,
+    byIdInScope,
+    cleanText,
+    ownText,
+    normalizeLabel,
+    isVisible,
+    isEffectivelyVisible,
+    domOrderCompare,
+    slugify,
+    safeUrl,
+    waitForDOMStability,
+    waitUntil,
+    setNativeValue,
+    fire,
+    pointerClick,
+    hashString,
+    flashElements,
   };
 })();

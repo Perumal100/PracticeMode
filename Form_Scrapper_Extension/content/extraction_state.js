@@ -1,214 +1,199 @@
 /**
- * content/extraction_state.js  (v2 — robust)
- * Uses chrome.storage.local (always available in content scripts).
- * Falls back to in-memory state if storage is unavailable.
- * Never stores real user data or sensitive content.
+ * content/extraction_state.js
+ * Temporary extraction state, scoped to one browser tab.
+ *
+ * Stored in chrome.storage.session (cleared when the browser closes) under
+ * `pm_state_<tabId>`, so an extraction survives page reloads and
+ * cross-page navigation inside the same tab, and two tabs never interfere.
+ * Pause/stop requests use a separate `pm_ctrl_<tabId>` key so the UI never
+ * races with the engine's own writes.
+ *
+ * Only form structure is stored: labels, types, options, constraints, step
+ * titles and navigation. Values typed into the page are never stored.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
 
-window.PracticeMode.extractionState = (() => {
-  const STATE_KEY = 'pm_extraction_state_v2';
+  const stateKey = (tabId) => `pm_state_${tabId}`;
+  const ctrlKey = (tabId) => `pm_ctrl_${tabId}`;
 
-  // ── In-memory fallback ──
-  let _memState = null;
+  // ── Storage adapter ─────────────────────────────────────────────────
+  // Content scripts can use storage.session once the service worker grants
+  // access; until then requests are relayed through the service worker.
+  let directSession = true;
 
-  function createInitialState(formId, existingSettings = {}) {
-    return {
-      formId,
-      status: 'idle',
-      startUrl: window.location.href,
-      frameContext: {
-        isTopFrame: window.top === window,
-        origin: window.location.origin,
-      },
-      currentStep: 0,
-      totalStepsDetected: null,
-      capturedSteps: [],
-      visitedSignatures: [],
-      unvisitedSteps: [],
-      conditionalResults: [],
-      warnings: [],
-      activeWarning: null,
-      requiresManual: false,
-      safeNavigationEnabled: existingSettings.safeNavigationEnabled || false,
-      startedAt: Date.now(),
-      lastUpdatedAt: Date.now(),
-    };
+  function relay(op, key, value) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: 'PM_STORAGE', op, key, value }, (response) => {
+        if (chrome.runtime.lastError) resolve(undefined);
+        else resolve(response?.value);
+      });
+    });
   }
 
-  function matchesCurrentFrame(state) {
-    const context = state?.frameContext;
-    // State from older versions did not record a frame. Preserve that behavior
-    // rather than preventing an existing extraction from resuming.
-    if (!context) return true;
-    return context.isTopFrame === (window.top === window) && context.origin === window.location.origin;
-  }
-
-  // ── Storage helpers with fallback ──
-  async function save(state) {
-    state.lastUpdatedAt = Date.now();
-    _memState = state; // always keep in memory
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        await new Promise((resolve) => {
-          chrome.storage.local.set({ [STATE_KEY]: state }, () => {
-            if (chrome.runtime.lastError) { /* ignore */ }
-            resolve();
-          });
-        });
+  async function sessionGet(key) {
+    if (directSession) {
+      try {
+        const result = await chrome.storage.session.get(key);
+        return result[key];
+      } catch (_) {
+        directSession = false;
       }
-    } catch (e) { /* storage unavailable — use memory only */ }
+    }
+    return relay('get', key);
+  }
+
+  async function sessionSet(key, value) {
+    if (directSession) {
+      try {
+        await chrome.storage.session.set({ [key]: value });
+        return;
+      } catch (_) {
+        directSession = false;
+      }
+    }
+    await relay('set', key, value);
+  }
+
+  async function sessionRemove(key) {
+    if (directSession) {
+      try {
+        await chrome.storage.session.remove(key);
+        return;
+      } catch (_) {
+        directSession = false;
+      }
+    }
+    await relay('remove', key);
+  }
+
+  async function localGet(key, fallback) {
+    try {
+      const result = await chrome.storage.local.get(key);
+      return result[key] ?? fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  // ── State ───────────────────────────────────────────────────────────
+  let ctx = { tabId: null, frameId: null };
+  let queue = Promise.resolve();
+
+  function setContext(next) {
+    ctx = { ...ctx, ...next };
+  }
+
+  function createState({ mode, settings, environment, frameId, isTopFrame }) {
+    const now = Date.now();
+    return {
+      version: 3,
+      runId: `run_${now.toString(36)}`,
+      tabId: ctx.tabId,
+      frameId,
+      isTopFrame,
+      mode, // 'auto' | 'assisted' | 'scan'
+      status: 'running',
+      environment,
+      startUrl: PM.utils.safeUrl(location.href),
+      origin: PM.safetyPolicy.originOf(location.href),
+      formTitle: null,
+      settings,
+      message: 'Starting…',
+      steps: [],
+      detected: { total: null, titles: [] },
+      navigation: [],
+      pendingNavigation: null,
+      conditionalLogic: [],
+      unvisitedSteps: [],
+      warnings: [],
+      blocker: null,
+      usedFieldIds: [],
+      completionReason: null,
+      startedAt: now,
+      updatedAt: now,
+      finishedAt: null,
+    };
   }
 
   async function load() {
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const result = await new Promise((resolve) => {
-          chrome.storage.local.get([STATE_KEY], (r) => {
-            if (chrome.runtime.lastError) { resolve(null); return; }
-            resolve(r);
-          });
-        });
-        const stored = result?.[STATE_KEY] || null;
-        if (stored) { _memState = stored; return stored; }
-      }
-    } catch (e) { /* fall through */ }
-    return _memState;
+    if (ctx.tabId === null) return null;
+    return (await sessionGet(stateKey(ctx.tabId))) || null;
   }
 
-  async function clear(keepSettings = true) {
-    let safeNav = false;
-    if (keepSettings) {
-      const current = await load();
-      safeNav = current?.safeNavigationEnabled || false;
-    }
-    _memState = null;
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        await new Promise((resolve) => {
-          chrome.storage.local.remove([STATE_KEY], resolve);
-        });
-      }
-    } catch (e) { /* ignore */ }
-    if (keepSettings && safeNav) {
-      await setSafeNavigation(true);
-    }
-  }
-
-  // ── State mutations ──
-  async function initialize(formId) {
-    const current = await load();
-    const existingSettings = {
-      safeNavigationEnabled: current?.safeNavigationEnabled || false,
-    };
-    const state = createInitialState(formId, existingSettings);
-    state.status = 'running';
-    await save(state);
+  async function save(state) {
+    state.updatedAt = Date.now();
+    await sessionSet(stateKey(ctx.tabId), state);
     return state;
   }
 
-  async function addCapturedStep(stepData) {
-    const state = await load() || createInitialState('auto');
-    state.capturedSteps.push(stepData);
-    state.currentStep = stepData.step;
-    await save(state);
+  /** Serialised read-modify-write. `mutator` may return false to skip saving. */
+  function update(mutator) {
+    queue = queue.then(async () => {
+      const state = await load();
+      if (!state) return null;
+      const keep = mutator(state);
+      if (keep === false) return state;
+      return save(state);
+    }).catch((e) => {
+      console.warn('[PracticeMode] state update failed', e);
+      return null;
+    });
+    return queue;
   }
 
-  async function addVisitedSignature(sig) {
-    const state = await load();
-    if (!state) return false;
-    if (state.visitedSignatures.includes(sig)) return false;
-    state.visitedSignatures.push(sig);
-    await save(state);
-    return true;
+  function replace(state) {
+    queue = queue.then(() => save(state));
+    return queue;
   }
 
-  async function isSignatureVisited(sig) {
-    const state = await load();
-    return state?.visitedSignatures?.includes(sig) || false;
+  async function remove() {
+    await sessionRemove(stateKey(ctx.tabId));
+    await sessionRemove(ctrlKey(ctx.tabId));
   }
 
-  async function addWarning(warning) {
-    const state = await load();
-    if (!state) return;
-    state.warnings.push({ message: warning, step: state.currentStep, at: Date.now() });
-    state.activeWarning = warning;
-    await save(state);
+  async function readControl() {
+    if (ctx.tabId === null) return null;
+    return (await sessionGet(ctrlKey(ctx.tabId))) || null;
   }
 
-  async function setStatus(status, extra = {}) {
-    const state = await load();
-    if (!state) return;
-    state.status = status;
-    state.activeWarning = extra.warning || state.activeWarning || null;
-    state.requiresManual = extra.requiresManual || false;
-    await save(state);
+  async function clearControl() {
+    await sessionRemove(ctrlKey(ctx.tabId));
   }
 
-  async function setSafeNavigation(enabled) {
-    let state = await load();
-    if (!state) state = createInitialState('settings');
-    state.safeNavigationEnabled = enabled;
-    await save(state);
+  async function loadConsent() {
+    return localGet(PM.safetyPolicy.CONSENT_KEY, {});
   }
 
-  async function getSafeNavigation() {
-    const state = await load();
-    return state?.safeNavigationEnabled || false;
+  async function loadSettings() {
+    const stored = await localGet(PM.safetyPolicy.SETTINGS_KEY, {});
+    return { ...PM.safetyPolicy.DEFAULT_SETTINGS, ...stored };
   }
 
-  async function addUnvisitedStep(stepInfo) {
-    const state = await load();
-    if (!state) return;
-    state.unvisitedSteps.push(stepInfo);
-    await save(state);
+  function addWarning(state, message, step) {
+    if (!message) return;
+    const last = state.warnings[state.warnings.length - 1];
+    if (last && last.message === message) return;
+    state.warnings.push({ step: step ?? state.steps.length, message, at: Date.now() });
+    if (state.warnings.length > 100) state.warnings.shift();
   }
 
-  async function setConditionalResults(results) {
-    const state = await load();
-    if (!state) return;
-    state.conditionalResults = results;
-    await save(state);
-  }
-
-  async function setTotalSteps(total) {
-    const state = await load();
-    if (!state) return;
-    state.totalStepsDetected = total;
-    await save(state);
-  }
-
-  async function buildExport() {
-    const state = await load();
-    if (!state) return null;
-    const steps = state.capturedSteps.map((s) => ({
-      step: s.step,
-      title: s.title,
-      url: s.url,
-      fields: s.fields,
-      sections: s.sections || [],
-    }));
-    return {
-      formTitle: state.capturedSteps[0]?.formTitle || 'Untitled Form',
-      extractionStatus: state.status === 'complete' ? 'complete' : 'partial',
-      sourceUrl: state.startUrl,
-      totalStepsDetected: state.totalStepsDetected,
-      capturedStepCount: steps.length,
-      steps,
-      conditionalDependencies: state.conditionalResults || [],
-      unvisitedSteps: state.unvisitedSteps || [],
-      warnings: state.warnings || [],
-      extractedAt: new Date(state.startedAt || Date.now()).toISOString(),
-    };
-  }
-
-  return {
-    initialize, load, save, clear,
-    matchesCurrentFrame,
-    addCapturedStep, addVisitedSignature, isSignatureVisited,
-    addWarning, setStatus, setSafeNavigation, getSafeNavigation,
-    addUnvisitedStep, setConditionalResults, setTotalSteps,
-    buildExport,
+  PM.extractionState = {
+    stateKey,
+    ctrlKey,
+    setContext,
+    get context() { return ctx; },
+    createState,
+    load,
+    save,
+    update,
+    replace,
+    remove,
+    readControl,
+    clearControl,
+    loadConsent,
+    loadSettings,
+    addWarning,
   };
 })();

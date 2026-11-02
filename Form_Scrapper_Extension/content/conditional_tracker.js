@@ -1,138 +1,182 @@
 /**
- * Conditional branch discovery.
+ * content/conditional_tracker.js
+ * Discovers conditional questions by trying each option of a choice field
+ * and recording which fields appear.
  *
- * A branch is recorded from the real fields exposed after selecting an option,
- * rather than from a type-only DOM diff. This lets the export include fields
- * that are not visible in the initial state (and their select options).
+ *  - Records which option revealed which field, so conditional fields are
+ *    never treated as simultaneously required.
+ *  - Explores nested branches up to two levels deep.
+ *  - Reports coverage honestly: options that were not tried (time or count
+ *    limits, custom widgets) are listed as unexplored.
+ *  - Restores each trigger to its original value afterwards when the widget
+ *    allows it.
+ *
+ * Only runs where automatic interaction is allowed (local fixtures or sites
+ * the user approved), because changing a value can trigger page scripts.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
+  const U = PM.utils;
+  const { extractFields } = PM.fieldExtractor;
 
-window.PracticeMode.conditionalTracker = (() => {
-  const { sleep } = window.PracticeMode.utils;
-  const { extractFields, sanitizeForExport } = window.PracticeMode.fieldExtractor;
+  const DEFAULTS = { budgetMs: 9000, maxTriggers: 12, maxOptions: 12, maxDepth: 2 };
 
-  const PROBE_WAIT_MS = 350;
-  const MAX_PROBE_FIELDS = 5;
-  const MAX_OPTIONS_PER_FIELD = 8;
-
-  function visibleFieldMap() {
-    return new Map(extractFields().map(field => [field._fingerprint, field]));
+  function usableOptions(field) {
+    return (field.options || []).map((o, index) => ({ ...o, index })).filter((o) => !o.disabled && !o.isPlaceholder && String(o.value ?? '') !== '');
   }
 
-  function nonPlaceholderOptions(options) {
-    return (options || []).filter(option =>
-      option.value !== '' && !option.disabled && !/select|choose|pick|--|please/i.test(option.text || option.label || '')
-    ).slice(0, MAX_OPTIONS_PER_FIELD);
+  function isProbeable(field) {
+    if (field.disabled || field.readOnly) return false;
+    if (field.type === 'checkbox' && field._kind === 'native') return true;
+    if (field._kind === 'custom-select') return false; // opening/choosing is too invasive to repeat per option
+    if (!['select', 'radio', 'button-group'].includes(field.type)) return false;
+    if (field.type === 'select' && field._el?.multiple) return false;
+    return usableOptions(field).length >= 2;
   }
 
-  function setNativeValue(el, value) {
-    const proto = el instanceof HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype;
-    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-    descriptor?.set ? descriptor.set.call(el, value) : el.value = value;
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+  // ── Reading and writing a trigger's state ───────────────────────────
+  function snapshot(field) {
+    const el = field._el;
+    if (field.type === 'select') return { value: el.value };
+    if (field.type === 'checkbox') return { checked: el.checked };
+    if (field._kind === 'aria-radio') return { index: (field._optionEls || []).findIndex((r) => r.getAttribute('aria-checked') === 'true') };
+    if (field._kind === 'button-group') return { index: (field._optionEls || []).findIndex((b) => b.getAttribute('aria-pressed') === 'true') };
+    return { index: (field._optionEls || []).findIndex((r) => r.checked) };
   }
 
-  function selectRadio(name, value) {
-    const radios = Array.from(document.querySelectorAll(`input[type="radio"]${name ? `[name="${CSS.escape(name)}"]` : ''}`));
-    const chosen = radios.find(radio => radio.value === value);
-    if (!chosen) return false;
-    chosen.click();
-    chosen.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  }
-
-  function conditionDescriptor(field, option) {
-    return {
-      triggerField: field.label,
-      triggerName: field.name,
-      triggerValue: option.value,
-      triggerLabel: option.text || option.label || option.value,
-    };
-  }
-
-  async function probeField(field) {
-    if (!field?._element || !['select', 'radio'].includes(field.type)) return [];
-    const options = nonPlaceholderOptions(field.options);
-    if (options.length < 2) return [];
-
-    const baseline = visibleFieldMap();
-    const originalValue = field.type === 'radio'
-      ? document.querySelector(`input[type="radio"]${field.name ? `[name="${CSS.escape(field.name)}"]` : ''}:checked`)?.value || ''
-      : field._element.value;
-    const branches = [];
-
-    for (const option of options) {
-      try {
-        if (field.type === 'radio') selectRadio(field.name, option.value);
-        else setNativeValue(field._element, option.value);
-        await sleep(PROBE_WAIT_MS);
-
-        const now = visibleFieldMap();
-        const revealed = [...now.entries()]
-          .filter(([fingerprint]) => !baseline.has(fingerprint))
-          .map(([, revealedField]) => ({
-            ...sanitizeForExport([revealedField])[0],
-            conditional: conditionDescriptor(field, option),
-          }));
-
-        if (revealed.length) branches.push({ ...conditionDescriptor(field, option), revealedFields: revealed });
-      } catch (_) {
-        // A widget may reject programmatic changes. Leave it unprobed and keep
-        // the rest of the form extraction running.
-      }
+  function apply(field, option) {
+    const el = field._el;
+    if (field.type === 'select') {
+      U.setNativeValue(el, option.value);
+      U.fire(el, 'input');
+      U.fire(el, 'change');
+      return;
     }
+    if (field.type === 'checkbox') {
+      if (el.checked !== option.checked) el.click();
+      return;
+    }
+    const target = field._optionEls?.[option.index];
+    if (!target) return;
+    if (field._kind === 'native') {
+      if (!target.checked) target.click();
+    } else {
+      U.pointerClick(target);
+    }
+  }
 
+  function restore(field, snap) {
     try {
-      if (field.type === 'radio') {
-        if (originalValue) selectRadio(field.name, originalValue);
-        else document.querySelectorAll(`input[type="radio"]${field.name ? `[name="${CSS.escape(field.name)}"]` : ''}`).forEach(radio => { radio.checked = false; });
-      } else {
-        setNativeValue(field._element, originalValue);
+      const el = field._el;
+      if (field.type === 'select') {
+        if (el.value !== snap.value) { U.setNativeValue(el, snap.value); U.fire(el, 'input'); U.fire(el, 'change'); }
+      } else if (field.type === 'checkbox') {
+        if (el.checked !== snap.checked) el.click();
+      } else if (snap.index >= 0) {
+        apply(field, { index: snap.index });
+      } else if (field._kind === 'native') {
+        // Nothing was chosen originally: clear the group again.
+        (field._optionEls || []).forEach((r) => { if (r.checked) { r.checked = false; U.fire(r, 'change'); } });
       }
-      await sleep(150);
-    } catch (_) { /* best effort restoration */ }
-
-    return branches;
+    } catch (_) { /* best effort */ }
   }
 
-  async function discoverConditionals(fields) {
-    const candidates = (fields || [])
-      .filter(field => ['select', 'radio'].includes(field.type) && (field.options || []).length >= 2)
-      .slice(0, MAX_PROBE_FIELDS);
-    const results = [];
-    for (const field of candidates) {
-      const branches = await probeField(field);
-      if (branches.length) results.push({ field: field.label, fieldType: field.type, branches });
-    }
-    return results;
+  function optionsToTry(field) {
+    if (field.type === 'checkbox') return [{ label: 'Checked', value: 'checked', checked: true }];
+    return usableOptions(field);
   }
 
-  function annotateWithConditionals(fields, conditionalResults) {
-    const merged = new Map();
-    for (const field of sanitizeForExport(fields)) merged.set(field._fingerprint || `${field.label}:${field.name}:${field.type}`, field);
+  async function settle() {
+    await U.waitForDOMStability(120, 700);
+  }
 
-    for (const result of conditionalResults || []) {
-      for (const branch of result.branches || []) {
-        for (const field of branch.revealedFields || []) {
-          const key = field._fingerprint || `${field.label}:${field.name}:${field.type}`;
-          const existing = merged.get(key);
-          if (existing) {
-            const dependencies = [...(existing.conditionalDependencies || []), field.conditional];
-            merged.set(key, { ...existing, conditionalDependencies: dependencies });
-          } else {
-            merged.set(key, field);
+  // ── Exploration ─────────────────────────────────────────────────────
+  /**
+   * Explore the choice fields in `fields`.
+   * Returns {
+   *   revealed: Map<fieldKey, { field, conditions: [condition] }>,
+   *   logic:    [{ triggerKey, triggerLabel, triggerType, depth, branches, explored, unexplored, coverage }]
+   * }
+   * where condition = { triggerKey, triggerLabel, value, valueLabel, parent? }.
+   */
+  async function explore(fields, options = {}) {
+    const cfg = { ...DEFAULTS, ...options };
+    const deadline = Date.now() + cfg.budgetMs;
+    const revealed = new Map();
+    const logic = [];
+
+    async function probe(trigger, depth, parentCondition) {
+      const tryList = optionsToTry(trigger);
+      const limited = tryList.slice(0, cfg.maxOptions);
+      const entry = {
+        triggerKey: trigger._key,
+        triggerLabel: trigger.label,
+        triggerType: trigger.type,
+        depth,
+        parent: parentCondition || undefined,
+        branches: [],
+        explored: [],
+        unexplored: tryList.slice(cfg.maxOptions).map((o) => o.label),
+      };
+      const baseline = new Set(extractFields().map((f) => f._key));
+      const snap = snapshot(trigger);
+
+      for (const option of limited) {
+        if (Date.now() > deadline) {
+          entry.unexplored.push(option.label);
+          continue;
+        }
+        try {
+          apply(trigger, option);
+          await settle();
+        } catch (_) {
+          entry.unexplored.push(option.label);
+          continue;
+        }
+        entry.explored.push(option.label);
+        const condition = {
+          triggerKey: trigger._key,
+          triggerLabel: trigger.label,
+          value: String(option.value),
+          valueLabel: option.label,
+          parent: parentCondition || undefined,
+        };
+        const now = extractFields();
+        const fresh = now.filter((f) => !baseline.has(f._key));
+        entry.branches.push({ value: String(option.value), valueLabel: option.label, revealsKeys: fresh.map((f) => f._key) });
+        for (const f of fresh) {
+          const record = revealed.get(f._key) || { field: f, conditions: [] };
+          record.field = f;
+          record.conditions.push(condition);
+          revealed.set(f._key, record);
+        }
+        if (depth < cfg.maxDepth) {
+          for (const nested of fresh.filter(isProbeable).slice(0, 3)) {
+            if (Date.now() > deadline) break;
+            await probe(nested, depth + 1, condition);
           }
         }
       }
+
+      restore(trigger, snap);
+      await settle();
+      entry.coverage = entry.unexplored.length ? 'partial' : 'complete';
+      // Only triggers that changed something are conditional logic.
+      if (entry.branches.some((b) => b.revealsKeys.length)) logic.push(entry);
+      else if (entry.unexplored.length) logic.push({ ...entry, branches: [], note: 'Some options were not tried; their effect is unknown.' });
     }
-    return [...merged.values()].map(field => {
-      const clean = { ...field };
-      delete clean._fingerprint;
-      return clean;
-    });
+
+    const triggers = fields.filter(isProbeable);
+    const probed = new Set();
+    for (const trigger of triggers.slice(0, cfg.maxTriggers)) {
+      if (Date.now() > deadline) break;
+      probed.add(trigger._key);
+      await probe(trigger, 1, null);
+    }
+    const skipped = triggers.filter((t) => !probed.has(t._key)).map((t) => t.label);
+    return { revealed, logic, skippedTriggers: skipped, timedOut: Date.now() > deadline };
   }
 
-  return { probeField, discoverConditionals, annotateWithConditionals };
+  PM.conditionalTracker = { explore, isProbeable };
 })();

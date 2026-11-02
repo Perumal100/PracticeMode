@@ -1,235 +1,222 @@
 /**
  * content/field_populator.js
- * Populates form fields with generated fictional data.
- * Triggers framework-compatible events for React/Angular/Vue.
- * Completely separate from the extraction and navigation engines.
+ * Enters generated fictional values into live form controls, dispatching the
+ * events React, Angular and Vue listen for. Contains no generation or
+ * navigation logic: values come from the dummy-data generator and the
+ * navigation controller decides when to call it.
  */
 
-window.PracticeMode = window.PracticeMode || {};
+(() => {
+  const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
+  const U = PM.utils;
+  const generator = PM.dummyDataGenerator;
+  const harvester = PM.optionHarvester;
 
-window.PracticeMode.fieldPopulator = (() => {
-  const { triggerNativeEvents, isVisible, sleep } = window.PracticeMode.utils;
-  const { generate } = window.PracticeMode.dummyDataGenerator;
+  const PLACEHOLDER_TEXT_RE = /^(select|choose|pick|search|type|start\s+typing|--|please)/i;
+  const CHOICE_TYPES = new Set(['select', 'radio', 'button-group', 'checkbox-group']);
 
-  // ──────────────────────────────────────────────
-  // Low-level field population
-  // ──────────────────────────────────────────────
-
-  function populateText(el, value) {
-    el.focus();
-    // React/Vue/Angular native value override
-    const proto = el instanceof HTMLTextAreaElement
-      ? window.HTMLTextAreaElement.prototype
-      : window.HTMLInputElement.prototype;
-    const nativeDesc = Object.getOwnPropertyDescriptor(proto, 'value');
-
-    if (nativeDesc && nativeDesc.set) {
-      nativeDesc.set.call(el, value);
-    } else {
-      el.value = value;
-    }
-
-    triggerNativeEvents(el, value);
-    el.blur();
-    return true;
-  }
-
-  function populateSelect(el, value) {
-    el.focus();
-    const nativeDesc = Object.getOwnPropertyDescriptor(
-      window.HTMLSelectElement.prototype,
-      'value'
-    );
-    if (nativeDesc && nativeDesc.set) {
-      nativeDesc.set.call(el, value);
-    } else {
-      el.value = value;
-    }
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.blur();
-    return true;
-  }
-
-  function populateCustomSelect(field, value) {
-    const trigger = field._element;
-    const option = Array.from((trigger.parentElement || document).querySelectorAll('[role="option"]'))
-      .find(item => (item.getAttribute('data-value') || item.getAttribute('value') || item.dataset?.value) === value)
-      || Array.from((trigger.parentElement || document).querySelectorAll('[role="option"]'))[0];
-    if (!trigger || !option) return false;
-    trigger.click();
-    option.click();
-    if (field._valueElement && field._valueElement.value !== value) {
-      const nativeDesc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-      nativeDesc?.set ? nativeDesc.set.call(field._valueElement, value) : field._valueElement.value = value;
-      triggerNativeEvents(field._valueElement, value);
-    }
-    trigger.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  }
-
-  function populateCheckbox(el, shouldCheck) {
-    if (el.checked !== shouldCheck) {
-      el.click();
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    return true;
-  }
-
-  function populateRadio(name, value) {
-    const radio = document.querySelector(
-      `input[type="radio"][name="${CSS.escape(name)}"][value="${CSS.escape(value)}"]`
-    );
-    if (!radio) {
-      // Try first visible option
-      const firstRadio = document.querySelector(
-        `input[type="radio"][name="${CSS.escape(name)}"]`
-      );
-      if (firstRadio) {
-        firstRadio.click();
-        firstRadio.dispatchEvent(new Event('change', { bubbles: true }));
-        return true;
-      }
-      return false;
-    }
-    radio.click();
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  }
-
-  function populateCheckboxGroup(name, value) {
-    // Check the first option in the group
-    const checkbox = document.querySelector(
-      `input[type="checkbox"][name="${CSS.escape(name)}"]`
-    );
-    if (checkbox && !checkbox.checked) {
-      checkbox.click();
-      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    return true;
-  }
-
-  function populateButtonGroup(field, value) {
-    const button = (field._optionElements || []).find(option => option.dataset.option === value && !option.disabled)
-      || (field._optionElements || []).find(option => !option.disabled);
-    if (!button) return false;
-    button.click();
-    button.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-  }
-
-  // Custom dropdown detection (non-native selects)
-  function tryPopulateCustomDropdown(field) {
-    const label = (field.label || '').toLowerCase();
-    // Look for common custom dropdown patterns
-    const wrapper = document.querySelector(
-      `[aria-label="${field.label}"], [data-testid="${field.name}"], [class*="dropdown"][aria-expanded]`
-    );
-    // Too risky to automate unknown custom dropdowns — skip
-    return false;
-  }
-
+  // ── Value presence ──────────────────────────────────────────────────
   function hasValue(field) {
-    const el = field._element;
-    if (!el) return false;
-    if (field.type === 'radio') {
-      return Boolean(document.querySelector(`input[type="radio"]${field.name ? `[name="${CSS.escape(field.name)}"]` : ''}:checked`));
+    const el = field._el;
+    if (!el?.isConnected) return false;
+    switch (field._kind) {
+      case 'custom-select': {
+        if (field._valueEl && String(field._valueEl.value || '').trim()) return true;
+        if (el.querySelector?.('[class*="singleValue"], [class*="single-value" i], [class*="multiValue"], [class*="selected-value" i], [class*="tag" i]')) return true;
+        const shown = U.cleanText(el.matches('input') ? el.value : el.textContent);
+        return Boolean(shown) && !PLACEHOLDER_TEXT_RE.test(shown) && shown !== field.label;
+      }
+      case 'aria-radio':
+        return (field._optionEls || []).some((r) => r.getAttribute('aria-checked') === 'true');
+      case 'aria-toggle':
+        return el.getAttribute('aria-checked') === 'true';
+      case 'button-group':
+        return (field._optionEls || []).some((b) => b.getAttribute('aria-pressed') === 'true' || /\b(selected|active|checked)\b/i.test(b.className));
+      case 'richtext':
+        return U.cleanText(el.textContent).length > 0;
+      default:
+        break;
     }
-    if (field.type === 'button-group') return Boolean(field._optionElements || []).some(option => option.getAttribute('aria-pressed') === 'true');
-    if (field.type === 'checkbox' || field.type === 'checkbox-group') return Boolean(el.checked);
-    if (field.custom) return Boolean(field._valueElement?.value);
-    return String(el.value || '').trim().length > 0;
+    if (field.type === 'radio' || field.type === 'checkbox-group') return (field._optionEls || []).some((r) => r.checked);
+    if (field.type === 'checkbox') return el.checked;
+    if (field.type === 'file') return (el.files?.length || 0) > 0;
+    if (field.type === 'select') {
+      if (el.multiple) return el.selectedOptions.length > 0;
+      const opt = el.selectedOptions?.[0];
+      return Boolean(opt && opt.value !== '' && !(field.options?.[opt.index]?.isPlaceholder));
+    }
+    return String(el.value ?? '').trim().length > 0;
   }
 
-  // ──────────────────────────────────────────────
-  // Public API
-  // ──────────────────────────────────────────────
+  /** Whether the browser's own constraint validation rejects the control. */
+  function isNativelyInvalid(field) {
+    const el = field._el;
+    return Boolean(el?.validity && el.willValidate && !el.validity.valid);
+  }
 
+  // ── Writers ─────────────────────────────────────────────────────────
+  function writeText(el, value) {
+    try { el.focus({ preventScroll: true }); } catch (_) { /* ignore */ }
+    U.fire(el, 'keydown', { key: 'a' });
+    U.setNativeValue(el, value);
+    U.fire(el, 'input', { data: String(value), inputType: 'insertText' });
+    U.fire(el, 'keyup', { key: 'a' });
+    U.fire(el, 'change');
+    try { el.blur(); } catch (_) { /* ignore */ }
+    U.fire(el, 'focusout');
+  }
+
+  function writeSelect(el, value) {
+    try { el.focus({ preventScroll: true }); } catch (_) { /* ignore */ }
+    if (el.multiple) {
+      Array.from(el.options).forEach((o) => { o.selected = o.value === value; });
+    } else {
+      U.setNativeValue(el, value);
+    }
+    U.fire(el, 'input');
+    U.fire(el, 'change');
+    try { el.blur(); } catch (_) { /* ignore */ }
+  }
+
+  function clickToggle(input, shouldBeChecked) {
+    if (input.checked === shouldBeChecked) return;
+    input.click();
+    if (input.checked !== shouldBeChecked) {
+      input.checked = shouldBeChecked;
+      U.fire(input, 'input');
+      U.fire(input, 'change');
+    }
+  }
+
+  function findOptionElement(field, value, optionLabel) {
+    const els = field._optionEls || [];
+    const idx = (field.options || []).findIndex((o) => String(o.value) === String(value) || (optionLabel && o.label === optionLabel));
+    if (idx >= 0 && els[idx]) return els[idx];
+    return els.find((e) => !e.disabled && e.getAttribute?.('aria-disabled') !== 'true') || null;
+  }
+
+  function writeFile(el, descriptor) {
+    let bytes;
+    if (descriptor.base64) {
+      const bin = atob(descriptor.base64);
+      bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    } else {
+      bytes = new TextEncoder().encode(descriptor.text || '');
+    }
+    const file = new File([bytes], descriptor.fileName, { type: descriptor.mimeType });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    el.files = transfer.files;
+    U.fire(el, 'input');
+    U.fire(el, 'change');
+  }
+
+  function writeRichText(el, value) {
+    el.focus();
+    let inserted = false;
+    try { inserted = document.execCommand('insertText', false, value); } catch (_) { inserted = false; }
+    if (!inserted) {
+      el.textContent = value;
+      U.fire(el, 'input');
+    }
+    el.blur();
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────
   /**
-   * Populate a single field with its generated value.
-   * Returns { success, requiresManual, reason }
+   * Fill one field. Returns
+   *   { status: 'filled' | 'manual' | 'failed' | 'skipped', reason?, blocker?, choice? }
    */
-  async function populateField(field) {
-    if (field.disabled || field.readOnly) {
-      return { success: false, requiresManual: false, reason: 'Field is disabled or read-only' };
-    }
+  async function fillField(field, ctx = {}) {
+    if (field.disabled || field.readOnly) return { status: 'skipped', reason: 'disabled or read-only' };
+    const el = field._el;
+    if (!el?.isConnected) return { status: 'failed', reason: 'control is no longer on the page' };
 
-    const generated = generate(field);
-    if (generated.requiresManual) {
-      return { success: false, requiresManual: true, reason: generated.reason };
-    }
-
-    const el = field._element;
-    if (!el || !isVisible(el)) {
-      return { success: false, requiresManual: false, reason: 'Element not visible or detached' };
-    }
+    const generated = generator.generate(field, ctx);
+    if (generated.requiresManual) return { status: 'manual', reason: generated.reason, blocker: generated.blocker };
+    const { value, optionLabel } = generated;
 
     try {
-      const { value } = generated;
-      const type = field.type;
-
-      if (type === 'select') {
-        if (field.custom) {
-          if (!populateCustomSelect(field, value)) throw new Error('Could not select a custom dropdown option');
-        } else {
-          populateSelect(el, value);
+      switch (field._kind) {
+        case 'custom-select': {
+          const ok = await harvester.choose(el, optionLabel || String(value), { typed: generated.typeahead ? String(value) : undefined });
+          if (!ok) return { status: 'failed', reason: `could not choose an option in "${field.label}"` };
+          break;
         }
-      } else if (type === 'radio') {
-        populateRadio(field.name, value);
-      } else if (type === 'checkbox') {
-        populateCheckbox(el, value === true || value === 'true');
-      } else if (type === 'checkbox-group') {
-        populateCheckboxGroup(field.name, value);
-      } else if (type === 'button-group') {
-        if (!populateButtonGroup(field, value)) throw new Error('Could not choose an option');
-      } else if (type === 'file') {
-        return {
-          success: false,
-          requiresManual: true,
-          reason: `File upload "${field.label}" requires manual input.`,
-        };
-      } else {
-        // text, email, tel, number, date, textarea, etc.
-        populateText(el, value);
+        case 'aria-radio':
+        case 'button-group': {
+          const target = findOptionElement(field, value, optionLabel);
+          if (!target) return { status: 'failed', reason: `no option to choose in "${field.label}"` };
+          U.pointerClick(target);
+          break;
+        }
+        case 'aria-toggle':
+          if (el.getAttribute('aria-checked') !== 'true') U.pointerClick(el);
+          break;
+        case 'richtext':
+          writeRichText(el, String(value));
+          break;
+        default:
+          if (field.type === 'radio') {
+            const target = findOptionElement(field, value, optionLabel);
+            if (!target) return { status: 'failed', reason: `no option to choose in "${field.label}"` };
+            clickToggle(target, true);
+          } else if (field.type === 'checkbox-group') {
+            const target = findOptionElement(field, value, optionLabel);
+            if (target) clickToggle(target, true);
+          } else if (field.type === 'checkbox') {
+            clickToggle(el, Boolean(value));
+          } else if (field.type === 'select') {
+            writeSelect(el, String(value));
+          } else if (field.type === 'file') {
+            writeFile(el, value);
+          } else {
+            writeText(el, String(value));
+          }
       }
-
-      await sleep(80); // brief yield for framework reactivity
-      return { success: true, requiresManual: false, populatedValue: value };
     } catch (e) {
-      return { success: false, requiresManual: false, reason: `Population error: ${e.message}` };
+      return { status: 'failed', reason: e.message };
     }
+
+    await U.sleep(40);
+    const choice = CHOICE_TYPES.has(field.type) ? { field: field.label, option: optionLabel || String(value) } : undefined;
+    return { status: 'filled', choice, designatedTestValue: generated.designatedTestValue };
   }
 
   /**
-   * Populate all required fields in an array with retry.
-   * Returns { populated: [], failed: [], requiresManual: [] }
+   * Fill the fields of one step.
+   *  attempt 0 : required fields that are still empty
+   *  attempt >0: additionally every field the site flagged as invalid
+   *              (`targetKeys`) and every other empty visible field, with
+   *              alternative values informed by the site's feedback.
    */
-  async function populateRequiredFields(fields, maxRetries = 2) {
-    const populated = [];
-    const failed = [];
-    const requiresManualList = [];
-
-    const required = fields.filter((f) => f.required && !f.disabled && !f.readOnly && !hasValue(f));
-
-    for (const field of required) {
-      let result;
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        result = await populateField(field);
-        if (result.success || result.requiresManual) break;
-        await sleep(300);
-      }
-
-      if (result.requiresManual) {
-        requiresManualList.push({ field: field.label, reason: result.reason });
-      } else if (result.success) {
-        populated.push({ field: field.label, value: result.populatedValue });
-      } else {
-        failed.push({ field: field.label, reason: result.reason });
+  async function fillStep(fields, { environment, attempt = 0, targetKeys = new Set(), feedbackByKey = new Map() } = {}) {
+    const result = { filled: [], manual: [], failed: [], choices: [] };
+    for (const field of fields) {
+      const targeted = targetKeys.has(field._key);
+      const empty = !hasValue(field);
+      const wanted = targeted || (empty && (field.required || attempt > 0) && !(isFileOrSensitiveOptional(field)));
+      if (!wanted) continue;
+      const outcome = await fillField(field, { environment, attempt: targeted ? attempt : 0, feedback: feedbackByKey.get(field._key) });
+      if (outcome.status === 'filled') {
+        result.filled.push(field.label);
+        if (outcome.choice) result.choices.push(outcome.choice);
+      } else if (outcome.status === 'manual') {
+        // Optional fields we cannot fill safely are simply left empty.
+        if (field.required || targeted) result.manual.push({ field: field.label, reason: outcome.reason, blocker: outcome.blocker });
+      } else if (outcome.status === 'failed') {
+        result.failed.push({ field: field.label, reason: outcome.reason });
       }
     }
-
-    return { populated, failed, requiresManual: requiresManualList };
+    return result;
   }
 
-  return { populateField, populateRequiredFields };
+  // Optional uploads and sensitive fields are never filled on retries; they
+  // are only touched when the site marks them as required.
+  function isFileOrSensitiveOptional(field) {
+    return !field.required && (field.type === 'file' || Boolean(PM.safetyPolicy.sensitiveKind(field)));
+  }
+
+  PM.fieldPopulator = { fillField, fillStep, hasValue, isNativelyInvalid };
 })();

@@ -5,15 +5,21 @@
   const emptyState = document.getElementById('emptyState');
 
   const text = value => String(value ?? '');
-  const optionLabel = option => text(option.text || option.label || option.value);
+  const optionLabel = option => text(option.label || option.text || option.value);
   const uniqueId = (step, field, index) => `pm-${step}-${text(field.id || field.name || field.label || 'field').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'field'}-${index}`;
 
+  function describeCondition(c) {
+    if (!c) return '';
+    const own = `"${c.field || 'a previous question'}" is "${c.valueLabel || c.value}"`;
+    return c.requires ? `${describeCondition(c.requires)} and ${own}` : own;
+  }
+
   function appendCondition(field, container) {
-    const dependency = field.conditional || field.conditionalDependencies?.[0];
-    if (!dependency) return;
+    const rules = field.conditional?.showWhen || [];
+    if (!rules.length) return;
     const badge = document.createElement('span');
     badge.className = 'condition';
-    badge.textContent = `Shown when ${dependency.triggerField || 'a previous field'} is ${dependency.triggerLabel || dependency.triggerValue}`;
+    badge.textContent = `Shown when ${rules.map(describeCondition).join(' or ')}`;
     container.append(badge);
   }
 
@@ -33,7 +39,7 @@
       control.type = multiple ? 'checkbox' : 'radio';
       control.name = multiple ? `${id}[]` : id;
       control.value = text(option.value);
-      control.checked = Boolean(option.checked || option.selected);
+      control.checked = Boolean(option.defaultSelected);
       control.disabled = Boolean(option.disabled || field.disabled);
       if (!multiple && field.required && index === 0) control.required = true;
       choice.append(control, document.createTextNode(optionLabel(option)));
@@ -65,13 +71,24 @@
       control.required = Boolean(field.required);
       control.disabled = Boolean(field.disabled || field.readOnly);
       control.multiple = Boolean(field.multiple);
+      const groups = new Map();
       (field.options || []).forEach(option => {
         const item = document.createElement('option');
         item.value = text(option.value);
         item.textContent = optionLabel(option);
-        item.selected = Boolean(option.selected);
+        item.selected = Boolean(option.defaultSelected);
         item.disabled = Boolean(option.disabled);
-        control.append(item);
+        if (option.group) {
+          if (!groups.has(option.group)) {
+            const group = document.createElement('optgroup');
+            group.label = option.group;
+            groups.set(option.group, group);
+            control.append(group);
+          }
+          groups.get(option.group).append(item);
+        } else {
+          control.append(item);
+        }
       });
       return control;
     }
@@ -142,7 +159,9 @@
       return;
     }
     title.textContent = data.formTitle || 'Extracted Form';
-    meta.textContent = `${data.capturedStepCount || data.steps.length} captured step${(data.capturedStepCount || data.steps.length) === 1 ? '' : 's'} · ${data.extractionStatus || 'partial'} extraction`;
+    const steps = data.summary?.capturedSteps ?? data.steps.length;
+    const fieldsTotal = data.summary?.totalFields ?? data.steps.reduce((n, s) => n + (s.fields?.length || 0), 0);
+    meta.textContent = `${steps} captured step${steps === 1 ? '' : 's'} · ${fieldsTotal} fields · ${data.extraction?.status || data.extractionStatus || 'partial'} extraction`;
 
     data.steps.forEach((step, stepIndex) => {
       const section = document.createElement('section');
@@ -157,7 +176,17 @@
       head.append(number, heading);
       const fields = document.createElement('div');
       fields.className = 'fields';
-      (step.fields || []).forEach((field, fieldIndex) => fields.append(buildField(field, step.step || stepIndex + 1, fieldIndex)));
+      let currentSection = null;
+      (step.fields || []).forEach((field, fieldIndex) => {
+        if (field.section && field.section !== currentSection) {
+          currentSection = field.section;
+          const heading = document.createElement('h3');
+          heading.className = 'section-title';
+          heading.textContent = field.section;
+          fields.append(heading);
+        }
+        fields.append(buildField(field, step.step || stepIndex + 1, fieldIndex));
+      });
       if (!step.fields?.length) {
         const noFields = document.createElement('p');
         noFields.className = 'help';
@@ -167,6 +196,25 @@
       section.append(head, fields);
       form.append(section);
     });
+
+    const issues = [
+      ...(data.unvisitedSteps || []).map(u => `Not visited — ${u.title}: ${u.reason}`),
+      ...(data.warnings || []).map(w => `${w.step ? `Step ${w.step}: ` : ''}${w.message}`),
+    ];
+    if (issues.length) {
+      const box = document.createElement('section');
+      box.className = 'issues';
+      const heading = document.createElement('h2');
+      heading.textContent = 'Limits of this extraction';
+      const list = document.createElement('ul');
+      issues.forEach(issue => {
+        const item = document.createElement('li');
+        item.textContent = issue;
+        list.append(item);
+      });
+      box.append(heading, list);
+      form.after(box);
+    }
   }
 
   form.addEventListener('submit', event => event.preventDefault());

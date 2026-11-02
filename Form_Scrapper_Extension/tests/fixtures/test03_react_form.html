@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 3 — React-Controlled Inputs</title>
+  <!-- Served from node_modules by tests/server.mjs (npm run fixtures). -->
+  <script src="/vendor/react.development.js"></script>
+  <script src="/vendor/react-dom.development.js"></script>
+  <style>
+    body { font-family: system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#333; }
+    input, select, textarea { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    input:focus, select:focus, textarea:focus { border-color:#6366f1; outline:none; }
+    textarea { resize:vertical; min-height:80px; }
+    .btn-row { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 22px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-primary:disabled { background:#c7d2fe; cursor:not-allowed; }
+    .btn-back { background:#eee; }
+    .step-badge { display:inline-block; background:#ede9fe; color:#7c3aed; border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; margin-bottom:12px; }
+    .char-count { font-size:11px; color:#999; text-align:right; margin-top:3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+  // Plain React.createElement (no JSX/Babel) so the fixture runs offline.
+  const { useState, createElement: h, Fragment } = React;
+
+  function Field({ id, label, children }) {
+    return h('div', { className: 'field' }, h('label', { htmlFor: id }, label), children);
+  }
+
+  function ReactForm() {
+    const [step, setStep] = useState(1);
+    const [data, setData] = useState({ firstName: '', lastName: '', email: '', bio: '', interests: '', website: '', role: '' });
+    const update = (key) => (e) => setData((d) => ({ ...d, [key]: e.target.value }));
+    const step1Valid = data.firstName.length >= 2 && data.lastName.length >= 2 && data.email.includes('@');
+    const step2Valid = data.bio.length >= 20;
+    const stepTitles = { 1: 'Profile Setup', 2: 'About You', 3: 'Final Details' };
+
+    let body;
+    if (step === 1) {
+      body = h(Fragment, null,
+        h(Field, { id: 'r-fname', label: 'First Name *' },
+          h('input', { id: 'r-fname', name: 'firstName', type: 'text', required: true, value: data.firstName, onChange: update('firstName'), placeholder: 'Alex', minLength: 2, maxLength: 50 })),
+        h(Field, { id: 'r-lname', label: 'Last Name *' },
+          h('input', { id: 'r-lname', name: 'lastName', type: 'text', required: true, value: data.lastName, onChange: update('lastName'), placeholder: 'Example', minLength: 2 })),
+        h(Field, { id: 'r-email', label: 'Email *' },
+          h('input', { id: 'r-email', name: 'email', type: 'email', required: true, value: data.email, onChange: update('email'), placeholder: 'alex@example.com' })),
+        h('div', { className: 'btn-row' },
+          h('button', { className: 'btn btn-primary', onClick: () => setStep(2), disabled: !step1Valid }, 'Continue →')));
+    } else if (step === 2) {
+      body = h(Fragment, null,
+        h(Field, { id: 'r-bio', label: 'Bio * (min 20 chars)' },
+          h('textarea', { id: 'r-bio', name: 'bio', required: true, minLength: 20, value: data.bio, onChange: update('bio'), placeholder: 'Tell us about yourself…' }),
+          h('div', { className: 'char-count' }, `${data.bio.length} / 200`)),
+        h(Field, { id: 'r-interests', label: 'Interests' },
+          h('input', { id: 'r-interests', name: 'interests', type: 'text', value: data.interests, onChange: update('interests'), placeholder: 'Technology, Design, Music' })),
+        h('div', { className: 'btn-row' },
+          h('button', { className: 'btn btn-back', onClick: () => setStep(1) }, '← Back'),
+          h('button', { className: 'btn btn-primary', onClick: () => setStep(3), disabled: !step2Valid }, 'Continue →')));
+    } else {
+      body = h(Fragment, null,
+        h(Field, { id: 'r-website', label: 'Website URL' },
+          h('input', { id: 'r-website', name: 'website', type: 'url', value: data.website, onChange: update('website'), placeholder: 'https://example.com' })),
+        h(Field, { id: 'r-role', label: 'Your Role' },
+          h('select', { id: 'r-role', name: 'role', value: data.role, onChange: update('role') },
+            h('option', { value: '' }, '-- Select --'),
+            h('option', { value: 'student' }, 'Student'),
+            h('option', { value: 'developer' }, 'Developer'),
+            h('option', { value: 'designer' }, 'Designer'),
+            h('option', { value: 'manager' }, 'Manager'))),
+        h('div', { className: 'btn-row' },
+          h('button', { className: 'btn btn-back', onClick: () => setStep(2) }, '← Back'),
+          h('button', { className: 'btn btn-primary', onClick: () => alert('PracticeMode: Submission blocked.') }, 'Submit Profile')));
+    }
+
+    return h('div', { className: 'card' },
+      h('span', { className: 'step-badge' }, `Step ${step} of 3 — ${stepTitles[step]}`),
+      h('h1', null, 'React-Controlled Form'),
+      h('p', { className: 'subtitle' }, 'All inputs are controlled React state — tests framework-compatible event dispatching.'),
+      body);
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(h(ReactForm));
+</script>
+</body>
+</html>
