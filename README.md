@@ -2,7 +2,7 @@
 
 PracticeMode is a safe, web-based place for people to practise completing online forms without entering information on external websites. Form definitions are imported from supported sources, reviewed by a human Form Reviewer, and published only after approval.
 
-> This repository retains the historical SkillLoop GitHub name. The product and Sprint 2 implementation are PracticeMode, as defined in the accepted Sprint 1 and Sprint 2 design documents.
+> The product and Sprint 2 implementation are PracticeMode, as defined in the accepted Sprint 1 and Sprint 2 design documents.
 
 ## Reviewer workflow implemented in Sprint 2
 
