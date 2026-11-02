@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 3 — React-Controlled Inputs</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#333; }
+    input, select, textarea { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    input:focus, select:focus, textarea:focus { border-color:#6366f1; outline:none; }
+    textarea { resize:vertical; min-height:80px; }
+    .btn-row { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 22px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-primary:disabled { background:#c7d2fe; cursor:not-allowed; }
+    .btn-back { background:#eee; }
+    .step-badge { display:inline-block; background:#ede9fe; color:#7c3aed; border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; margin-bottom:12px; }
+    .char-count { font-size:11px; color:#999; text-align:right; margin-top:3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+  const { useState } = React;
+
+  function ReactForm() {
+    const [step, setStep] = useState(1);
+    const [data, setData] = useState({
+      firstName:'', lastName:'', email:'',
+      bio:'', interests:'', website:'',
+    });
+
+    const update = field => e => setData(d => ({ ...d, [field]: e.target.value }));
+
+    const step1Valid = data.firstName.length >= 2 && data.lastName.length >= 2 && data.email.includes('@');
+    const step2Valid = data.bio.length >= 20;
+
+    const stepTitles = { 1:'Profile Setup', 2:'About You', 3:'Final Details' };
+
+    return (
+      <div className="card">
+        <span className="step-badge">Step {step} of 3 — {stepTitles[step]}</span>
+        <h1>React-Controlled Form</h1>
+        <p className="subtitle">All inputs are controlled React state — tests framework-compatible event dispatching.</p>
+
+        {step === 1 && (
+          <>
+            <div className="field">
+              <label htmlFor="r-fname">First Name *</label>
+              <input id="r-fname" name="firstName" type="text" required
+                value={data.firstName} onChange={update('firstName')}
+                placeholder="Alex" minLength={2} maxLength={50}/>
+            </div>
+            <div className="field">
+              <label htmlFor="r-lname">Last Name *</label>
+              <input id="r-lname" name="lastName" type="text" required
+                value={data.lastName} onChange={update('lastName')}
+                placeholder="Example" minLength={2}/>
+            </div>
+            <div className="field">
+              <label htmlFor="r-email">Email *</label>
+              <input id="r-email" name="email" type="email" required
+                value={data.email} onChange={update('email')}
+                placeholder="alex@example.com"/>
+            </div>
+            <div className="btn-row">
+              <button className="btn btn-primary" onClick={() => setStep(2)} disabled={!step1Valid}>
+                Continue →
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div className="field">
+              <label htmlFor="r-bio">Bio * (min 20 chars)</label>
+              <textarea id="r-bio" name="bio" required minLength={20}
+                value={data.bio} onChange={update('bio')}
+                placeholder="Tell us about yourself…"/>
+              <div className="char-count">{data.bio.length} / 200</div>
+            </div>
+            <div className="field">
+              <label htmlFor="r-interests">Interests</label>
+              <input id="r-interests" name="interests" type="text"
+                value={data.interests} onChange={update('interests')}
+                placeholder="Technology, Design, Music"/>
+            </div>
+            <div className="btn-row">
+              <button className="btn btn-back" onClick={() => setStep(1)}>← Back</button>
+              <button className="btn btn-primary" onClick={() => setStep(3)} disabled={!step2Valid}>
+                Continue →
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <div className="field">
+              <label htmlFor="r-website">Website URL</label>
+              <input id="r-website" name="website" type="url"
+                value={data.website} onChange={update('website')}
+                placeholder="https://example.com"/>
+            </div>
+            <div className="field">
+              <label htmlFor="r-role">Your Role</label>
+              <select id="r-role" name="role" value={data.role || ''} onChange={update('role')}>
+                <option value="">-- Select --</option>
+                <option value="student">Student</option>
+                <option value="developer">Developer</option>
+                <option value="designer">Designer</option>
+                <option value="manager">Manager</option>
+              </select>
+            </div>
+            <div className="btn-row">
+              <button className="btn btn-back" onClick={() => setStep(2)}>← Back</button>
+              <button className="btn btn-primary" onClick={() => alert('PracticeMode: Submission blocked.')}>
+                Submit Profile
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<ReactForm/>);
+</script>
+</body>
+</html>

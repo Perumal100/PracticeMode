@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PracticeMode — Form Preview</title>
+  <link rel="stylesheet" href="preview.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">PracticeMode · Extracted form preview</p>
+      <h1 id="formTitle">Loading preview…</h1>
+      <p class="subtitle" id="formMeta"></p>
+      <p class="notice">This is a local preview generated from extraction data. It does not submit or send answers anywhere.</p>
+    </header>
+
+    <div id="emptyState" class="empty-state" hidden>
+      <h2>Nothing to preview yet</h2>
+      <p>Return to the extension, scan a form, then choose <strong>Open Form Preview</strong>.</p>
+    </div>
+
+    <form id="previewForm" class="preview-form" novalidate></form>
+  </main>
+  <script src="preview.js"></script>
+</body>
+</html>

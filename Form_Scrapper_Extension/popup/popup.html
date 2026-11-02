@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PracticeMode — Form Scraper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ── Header ── -->
+    <header class="header">
+      <div class="header-brand">
+        <div class="logo">
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <rect width="22" height="22" rx="6" fill="url(#grad)"/>
+            <path d="M6 8h10M6 11h7M6 14h5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="16" cy="14" r="2.5" fill="#fff" opacity=".9"/>
+            <defs>
+              <linearGradient id="grad" x1="0" y1="0" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#6366f1"/>
+                <stop offset="1" stop-color="#8b5cf6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-name">PracticeMode</span>
+          <span class="brand-sub">Form Extractor</span>
+        </div>
+      </div>
+      <div class="status-badge" id="statusBadge">
+        <span class="status-dot"></span>
+        <span class="status-label" id="statusLabel">Ready</span>
+      </div>
+    </header>
+
+    <!-- ── Automation Notice Banner ── -->
+    <div class="safety-banner" id="safetyBanner">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M7 1L1.5 4v4c0 3.1 2.5 5.3 5.5 5.5 3-.2 5.5-2.4 5.5-5.5V4L7 1z" fill="#f59e0b" opacity=".2" stroke="#f59e0b" stroke-width="1.2"/>
+        <path d="M7 5v3M7 9.5v.5" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span>Complete-form extraction automatically advances accessible steps. Final submission is never clicked.</span>
+    </div>
+
+    <!-- ── Automatic Navigation Status ── -->
+    <div class="control-row" id="safeNavRow">
+      <div class="control-info">
+        <span class="control-label">Automatic Step Navigation</span>
+        <span class="control-desc">Fill supported required fields and collect each accessible step</span>
+      </div>
+      <label class="toggle" title="Automatic step navigation is enabled">
+        <input type="checkbox" id="safeNavCheck" checked disabled />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- ── Primary Action Buttons ── -->
+    <div class="button-group">
+      <button class="btn btn-secondary" id="btnScanStep" title="Extract only the current visible step">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M4.5 7h5M7 4.5v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        Scan Current Step
+      </button>
+
+      <button class="btn btn-primary" id="btnExtract" title="Automatically navigate and extract all steps">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Extract Complete Form
+      </button>
+    </div>
+
+    <!-- ── Progress Panel ── -->
+    <div class="progress-panel" id="progressPanel">
+      <div class="progress-header">
+        <span class="progress-title">Extraction Progress</span>
+        <div class="progress-controls">
+          <button class="btn-icon" id="btnPause" title="Pause extraction">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="2.5" y="2" width="2.5" height="8" rx="1" fill="currentColor"/><rect x="7" y="2" width="2.5" height="8" rx="1" fill="currentColor"/></svg>
+          </button>
+          <button class="btn-icon" id="btnResume" title="Resume extraction" style="display:none">
+            <svg width="12" height="12" viewBox="0 0 12 12"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+          </button>
+          <button class="btn-icon btn-icon-danger" id="btnStop" title="Stop extraction">
+            <svg width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <div class="progress-stats">
+        <div class="stat">
+          <span class="stat-val" id="statDetected">—</span>
+          <span class="stat-key">Detected</span>
+        </div>
+        <div class="stat">
+          <span class="stat-val" id="statCaptured">0</span>
+          <span class="stat-key">Captured</span>
+        </div>
+        <div class="stat">
+          <span class="stat-val" id="statFields">0</span>
+          <span class="stat-key">Fields</span>
+        </div>
+        <div class="stat">
+          <span class="stat-val" id="statStep">—</span>
+          <span class="stat-key">Active Step</span>
+        </div>
+      </div>
+
+      <div class="progress-message" id="progressMessage">Initializing…</div>
+
+      <div class="warning-box" id="warningBox" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M6.5 1L1 11h11L6.5 1z" stroke="#f59e0b" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M6.5 5v3M6.5 9.5v.5" stroke="#f59e0b" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span id="warningText"></span>
+      </div>
+
+      <div class="manual-notice" id="manualNotice" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <circle cx="6.5" cy="6.5" r="5.5" stroke="#60a5fa" stroke-width="1.2"/>
+          <path d="M6.5 5.5v4M6.5 4v-.5" stroke="#60a5fa" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        <span>User action required to continue.</span>
+      </div>
+    </div>
+
+    <!-- ── Export Panel ── -->
+    <div class="export-panel" id="exportPanel" style="display:none">
+      <div class="export-header">
+        <span class="export-title">Export</span>
+        <span class="export-badge" id="exportStatus">Ready</span>
+      </div>
+      <div class="export-actions">
+        <button class="btn btn-outline" id="btnExportPartial">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M6.5 1v8M3 6l3.5 4L10 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M1 11h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          Export Partial
+        </button>
+        <button class="btn btn-success" id="btnDownloadJSON">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M6.5 1v8M3 6l3.5 4L10 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M1 11h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          Download JSON
+        </button>
+      </div>
+      <button class="btn btn-secondary preview-form-btn" id="btnPreviewForm">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <rect x="1.2" y="1.5" width="10.6" height="8" rx="1.2" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M4.2 11.4h4.6M6.5 9.5v1.9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        Open Form Preview
+      </button>
+    </div>
+
+    <!-- ── JSON Preview ── -->
+    <div class="preview-panel" id="previewPanel" style="display:none">
+      <div class="preview-header">
+        <span class="preview-title">Extracted Structure</span>
+        <button class="btn-icon" id="btnCopy" title="Copy JSON">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <rect x="4" y="4" width="7" height="8" rx="1.2" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M2 9V2h7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <pre class="preview-code" id="previewCode"></pre>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
