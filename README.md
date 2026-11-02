@@ -1,38 +1,42 @@
-# SkillLoop
+# PracticeMode
 
-SkillLoop is an AI-assisted employee skill-evidence and manager-review platform. Employees submit quarterly goals and project summaries. The system generates evidence-linked skill suggestions and a feedback draft, while managers remain responsible for all final review decisions.
+PracticeMode is a safe, web-based place for people to practise completing online forms without entering information on external websites. Form definitions are imported from supported sources, reviewed by a human Form Reviewer, and published only after approval.
 
-## MVP workflow
+> This repository retains the historical SkillLoop GitHub name. The product and Sprint 2 implementation are PracticeMode, as defined in the accepted Sprint 1 and Sprint 2 design documents.
+
+## Reviewer workflow implemented in Sprint 2
 
 ```text
-Employee goal + project summary
-        → AI evidence-linked draft
-        → manager review
-        → confirmed feedback and team skill map
+Supported schema import
+        -> AWAITING_REVIEW notification
+        -> reviewer inspects source and extracted fields
+        -> APPROVED (available to learners) or REJECTED (with reason)
 ```
 
-## Technology plan
+The reviewer API is server-side protected. A signed-out caller receives `401`; an authenticated caller without the `FORM_REVIEWER` group receives `403`; a form can be decided only once. See [the reviewer workflow notes](docs/sprint-02-reviewer-workflow.md) and [the Product Backlog](docs/product-backlog.md).
 
-- Frontend: React and TypeScript
-- Backend: FastAPI and Python
-- Database: PostgreSQL
-- AI: LLM API with structured, evidence-linked responses
-- Tests: Pytest, React Testing Library, and Playwright
+## Local development
 
-## Project documentation
+The current implementation is Django and Django REST Framework. PostgreSQL is the production target; SQLite is used by default for an easy local start.
 
-- [Product requirements](docs/product-requirements.md)
-- [Sprint 1 product foundation](docs/sprint-01-product-foundation.md)
-- [Development workflow](docs/development-workflow.md)
-- [Product backlog](docs/product-backlog.md)
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python manage.py migrate
+.\.venv\Scripts\python manage.py test reviewer
+.\.venv\Scripts\python manage.py runserver
+```
 
-## Responsible-AI principles
+Use `DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME` to use PostgreSQL. Set `DJANGO_FORCE_HTTPS=true` and `DJANGO_DEBUG=false` in a hosted environment.
 
-- AI output is a draft, never an official performance decision.
-- Every proposed skill must include source evidence from the employee submission.
-- Managers approve, edit, reject, or request more evidence for every official claim.
-- The MVP uses synthetic data only.
+## Implemented endpoints
 
-## Status
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/review/forms` | Pending review queue, or a specific valid `status` query value |
+| `GET` | `/api/review/forms/{formId}` | Extracted fields, validation metadata, and source reference |
+| `POST` | `/api/review/forms/{formId}/decision` | Approve or reject an awaiting form |
+| `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
+| `POST` | `/api/forms/extractions` | Import a supported schema for reviewer verification |
 
-The project is in Sprint 1: product foundation and planning.
+The import endpoint accepts schema metadata only. Learner answer values are rejected and are never forwarded to a source site.
