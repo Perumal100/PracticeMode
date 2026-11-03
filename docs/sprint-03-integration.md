@@ -1,6 +1,6 @@
 # Sprint 3 Integration Guide
 
-How to combine the Sprint 3 branches into one working build. Each branch has been checked against the others, and the combined result was tested end to end: 116 backend tests, 67 frontend tests, 25 extension unit and 25 end-to-end tests, and a full-stack walkthrough through the web app.
+How the Sprint 3 branches were combined into one working build. The integration was done on `develop-perumal` and `main` was then fast-forwarded to it. The four merge commits show each branch coming in, in the order below. The combined result passes 116 backend tests, 67 frontend tests, and 25 extension unit and 25 end-to-end tests, plus a full-stack walkthrough through the web app. The steps are kept here so the merge can be repeated or audited.
 
 ## Branches
 
@@ -30,7 +30,7 @@ Conflicts from `dev-rohan`. Each resolution keeps both sides:
 | --- | --- |
 | `practicemode/settings.py` | Take `dev-rohan`'s `INSTALLED_APPS` (`accounts`, `reviewer`, `catalog`, `attempts`). Either docstring line is fine. |
 | `practicemode/urls.py` | Keep all four includes: `reviewer.urls`, `accounts.urls`, `catalog.urls`, `attempts.urls`. Their paths and URL names do not overlap. |
-| `README.md` | Combine. Keep the setup and endpoint sections from both, then add the run steps below. |
+| `README.md` | Combined into one README: run steps and demo script, project layout, API reference by area, validation rules, data model, configuration and tests. |
 
 `reviewer/models.py`, `reviewer/migrations/0001` and `0002`, `.gitignore` and `requirements.txt` are identical on every branch that has them, so they merge without conflicts. `attempts.0001` depends on `reviewer.0001` only, so the migration graph stays linear.
 

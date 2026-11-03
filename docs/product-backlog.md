@@ -2,26 +2,28 @@
 
 The backlog reflects the accepted Sprint 1 scope and Sprint 2 design. The 16 MVP stories form the end-to-end practice workflow; stretch and out-of-scope stories are retained to keep prioritisation explicit.
 
+Sprint 3 delivered the import → review → practice workflow (11 MVP stories). The instructor stories (US-03, US-05, US-22) and the guidance stories (US-09, US-12, US-18) stay in the backlog for Sprint 4. "Implemented" means the code, tests and demo walkthrough pass on `main`. A story counts as Done once a teammate has reviewed it.
+
 ## MVP
 
-| ID | Persona | Story | Sprint 2 status |
+| ID | Persona | Story | Sprint 3 status |
 | --- | --- | --- | --- |
-| US-01 | All roles | Access the role-appropriate workspace securely. | Planned shared authentication |
-| US-02 | Learner | Search approved practice forms by keyword and category. | Planned |
-| US-03 | Learner | Request an instructor assistance session. | Planned |
-| US-04 | Form Reviewer | Inspect awaiting-review forms and extracted field metadata. | Implemented API |
-| US-05 | Instructor | View authorised assistance requests. | Planned |
-| US-08 | Learner | Autosave an unfinished practice attempt. | Planned |
-| US-09 | Learner | View original labels and available translated guidance. | Planned |
-| US-10 | Form Reviewer | Compare an extracted form with its stored source reference. | Implemented API |
-| US-11 | Learner | Edit answers in an approved practice copy. | Planned |
-| US-12 | Learner | Open contextual field hints. | Planned |
-| US-16 | Form Reviewer | Receive a notification when a form awaits review. | Implemented API |
-| US-17 | Form Reviewer | Approve or reject a pending form and record the outcome. | Implemented API |
-| US-18 | Learner | View fictional preparation information. | Planned |
-| US-22 | Instructor | Filter authorised learner progress. | Planned |
-| US-25 | Form Reviewer | Import a supported form schema for human verification. | Implemented API |
-| US-26 | Learner | Complete an attempt and receive validation feedback. | Planned |
+| US-01 | All roles | Access the role-appropriate workspace securely. | Implemented: staff and learner sign-in, role checks, sign-in screen |
+| US-02 | Learner | Search approved practice forms by keyword and category. | Implemented: keyword and multi-category search, learner home |
+| US-03 | Learner | Request an instructor assistance session. | Product backlog (Sprint 4) |
+| US-04 | Form Reviewer | Inspect awaiting-review forms and extracted field metadata. | Implemented: review queue and form inspection screens |
+| US-05 | Instructor | View authorised assistance requests. | Product backlog (Sprint 4) |
+| US-08 | Learner | Autosave an unfinished practice attempt. | Implemented: autosave, resume and save-failure warnings |
+| US-09 | Learner | View original labels and available translated guidance. | Product backlog (Sprint 4) |
+| US-10 | Form Reviewer | Compare an extracted form with its stored source reference. | Implemented: source link and availability flag; no automatic re-check yet |
+| US-11 | Learner | Edit answers in an approved practice copy. | Implemented: practice workspace on approved forms only |
+| US-12 | Learner | Open contextual field hints. | Product backlog (Sprint 4) |
+| US-16 | Form Reviewer | Receive a notification when a form awaits review. | Implemented: new-import notifications |
+| US-17 | Form Reviewer | Approve or reject a pending form and record the outcome. | Implemented: approve, or reject with a required reason |
+| US-18 | Learner | View fictional preparation information. | Product backlog (Sprint 4) |
+| US-22 | Instructor | Filter authorised learner progress. | Product backlog (Sprint 4) |
+| US-25 | Form Reviewer | Import a supported form schema for human verification. | Implemented: browser extension import with server-side validation |
+| US-26 | Learner | Complete an attempt and receive validation feedback. | Implemented: completion with per-field feedback |
 
 ## Stretch
 
