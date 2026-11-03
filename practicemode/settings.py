@@ -7,7 +7,11 @@ from pathlib import Path
 import os
 from urllib.parse import urlparse
 
+from .env import load_env_file
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Local overrides live in an untracked .env file; see .env.example.
+load_env_file(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "development-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = [host for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host]

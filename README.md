@@ -24,10 +24,11 @@ for name, role in [('reviewer', 'FORM_REVIEWER'), ('instructor', 'INSTRUCTOR')]:
     user.save()
     user.groups.set([Group.objects.get_or_create(name=role)[0]])
 "
-DJANGO_CSRF_TRUSTED_ORIGINS=chrome-extension://<extension-id> .venv/bin/python manage.py runserver
+cp .env.example .env                      # optional: local settings, see Configuration
+.venv/bin/python manage.py runserver
 ```
 
-Demo accounts: `reviewer` / `change-me-123` (Form Reviewer) and `instructor` / `change-me-123`. Learners need no account; they type a display name. Each staff account needs exactly one role group. On Windows, use `.venv\Scripts\python` and set the variable with `set DJANGO_CSRF_TRUSTED_ORIGINS=...` first.
+Demo accounts: `reviewer` / `change-me-123` (Form Reviewer) and `instructor` / `change-me-123`. Learners need no account; they type a display name. Each staff account needs exactly one role group. On Windows, use `.venv\Scripts\python` and `copy .env.example .env`.
 
 **2. Web app** (http://localhost:5173, proxies `/api` to the backend):
 
@@ -38,7 +39,7 @@ cd frontend && npm install && npm run dev
 **3. Browser extension** (optional; it imports new forms):
 
 1. Open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and choose `Form_Scrapper_Extension`.
-2. Put its ID in `DJANGO_CSRF_TRUSTED_ORIGINS` above.
+2. Put its ID in `.env` as `DJANGO_CSRF_TRUSTED_ORIGINS=chrome-extension://<id>` and restart the server.
 3. Run the bundled test forms with `cd Form_Scrapper_Extension && npm install && npm run fixtures`. They are at http://localhost:4317.
 4. Sign in to the web app as `reviewer` in the same Chrome profile, open a test form, and use **Send to PracticeMode for review**.
 
@@ -215,6 +216,8 @@ Running the command again skips existing demo forms without changing them.
 No learner answers or user accounts are created.
 
 ## Configuration
+
+Every setting is optional for local use. Put local values in a `.env` file at the project root, starting from `cp .env.example .env`. The backend reads it on start-up (`practicemode/env.py`). `.env` is git-ignored, so each person keeps their own. Variables already set in the shell or by a host override the file.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
