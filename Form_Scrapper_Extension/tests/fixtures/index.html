@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>PracticeMode extension — test fixtures</title>
+  <link rel="stylesheet" href="_shared.css"/>
+  <style>
+    body { display: block; }
+    .card { max-width: 820px; margin: 0 auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+    th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+    code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>PracticeMode extension — test fixtures</h1>
+  <p class="step-indicator">Served on localhost, so automatic navigation is allowed without a consent prompt. Open a fixture, then use the toolbar popup or the on-page copilot. The automated versions of these checks are in <code>tests/e2e/extraction.spec.mjs</code> (<code>npm run test:e2e</code>).</p>
+  <table>
+    <thead><tr><th>Fixture</th><th>Scenario (requirement §9)</th><th>Expected result</th></tr></thead>
+    <tbody>
+      <tr><td><a href="test01_three_step_form.html">01 Three-step form</a></td><td>Required fields on each step</td><td>4 steps captured, stops before “Submit Application”.</td></tr>
+      <tr><td><a href="test02_dynamic_next_button.html">02 Dynamic Next</a></td><td>Next is disabled until fields are valid</td><td>3 steps, stops before “Create Account”.</td></tr>
+      <tr><td><a href="test03_react_form.html">03 React form</a></td><td>React-controlled inputs (needs <code>npm install</code>)</td><td>3 steps; values register with React.</td></tr>
+      <tr><td><a href="test04_conditional_sections.html">04 Conditional sections</a></td><td>Yes/No/Self-employed branches</td><td>12 conditional fields, each linked to the answer that reveals it.</td></tr>
+      <tr><td><a href="test05_validation_errors.html">05 Validation errors</a></td><td>Site rejects the first sample values</td><td>Messages read, values retried, reaches step 2.</td></tr>
+      <tr><td><a href="test06_custom_dropdowns.html">06 Custom dropdowns</a></td><td>Native, ARIA and datalist options</td><td>All options of every dropdown exported.</td></tr>
+      <tr><td><a href="test07_inaccessible_step.html">07 Inaccessible step</a></td><td>CAPTCHA blocks progress</td><td>Pauses with “Your action is needed”; never touches the CAPTCHA.</td></tr>
+      <tr><td><a href="test08_final_submit_button.html">08 Final submit</a></td><td>Review page with Submit</td><td>Stops before “Submit Application”.</td></tr>
+      <tr><td><a href="test09_file_upload.html">09 File upload</a></td><td>Required upload before Next</td><td>Synthetic sample file here; on external sites it asks you.</td></tr>
+      <tr><td><a href="test10_cyclic_navigation.html">10 Cyclic navigation</a></td><td>Next returns to an earlier step</td><td>Loop detected, extraction stops.</td></tr>
+      <tr><td><a href="test11_multiple_branches.html">11 Multiple branches</a></td><td>Several independent conditional questions</td><td>Every option explored, coverage “complete”.</td></tr>
+      <tr><td><a href="test12_tabbed_form.html">12 Tabbed wizard</a></td><td>Stepper / tab navigation</td><td>Stepper titles detected; 4 steps.</td></tr>
+      <tr><td><a href="test13_multipage_page1.html">13 Multi-page form</a></td><td>Full page reloads across URLs</td><td>3 steps on 3 URLs; state survives reloads.</td></tr>
+      <tr><td><a href="test14_lazy_dropdowns.html">14 Lazy dropdowns</a></td><td>Options rendered only when open; virtualised list; body portal</td><td>All 40 departments and 12 months exported.</td></tr>
+      <tr><td><a href="test15_shadow_dom.html">15 Shadow DOM</a></td><td>Web component wizard</td><td>Fields inside shadow roots extracted and navigated.</td></tr>
+      <tr><td><a href="single_page_application.html">Single-page application</a></td><td>Use “Scan current step”</td><td>14 fields, nothing typed into the page.</td></tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

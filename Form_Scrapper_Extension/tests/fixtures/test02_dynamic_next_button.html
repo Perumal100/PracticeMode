@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 2 — Dynamic Next Button</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#f0f4f8; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; }
+    input, select { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; }
+    input:focus { border-color:#6366f1; outline:none; }
+    .progress { height:6px; background:#e2e8f0; border-radius:6px; margin-bottom:20px; overflow:hidden; }
+    .progress-fill { height:100%; background:#6366f1; border-radius:6px; transition:.4s; }
+    .btn-row { display:flex; gap:10px; margin-top:20px; justify-content:flex-end; }
+    .btn { padding:10px 22px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; transition:.2s; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-primary:disabled { background:#c7d2fe; cursor:not-allowed; }
+    .btn-back { background:#eee; color:#333; }
+    .step { display:none; }
+    .step.active { display:block; }
+    .hint { font-size:11px; color:#777; margin-top:3px; }
+    .ready-badge { display:none; font-size:12px; color:#10b981; background:#d1fae5; border-radius:20px; padding:4px 10px; margin-left:8px; }
+    .ready-badge.show { display:inline-block; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Account Registration</h1>
+  <div class="progress">
+    <div class="progress-fill" id="progressFill" style="width:33%"></div>
+  </div>
+  <p style="font-size:12px;color:#666;margin-bottom:16px" id="stepHint">Step 1 of 3 — Basic Info</p>
+
+  <!-- Step 1: Name required to unlock Next -->
+  <div class="step active" id="s1">
+    <div class="field">
+      <label for="uname">Full Name <span style="color:red">*</span></label>
+      <input type="text" id="uname" name="fullName" required placeholder="Alex Example" oninput="checkStep1()"/>
+      <div class="hint">Next button unlocks once you enter your name.</div>
+    </div>
+    <div class="field">
+      <label for="uemail">Email Address <span style="color:red">*</span></label>
+      <input type="email" id="uemail" name="email" required placeholder="alex@example.com" oninput="checkStep1()"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnNext1" disabled onclick="advance(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Password (dynamic validation) -->
+  <div class="step" id="s2">
+    <div class="field">
+      <label for="pass">Password <span style="color:red">*</span></label>
+      <input type="password" id="pass" name="password" required minlength="8" placeholder="Min 8 characters" oninput="checkStep2()"/>
+      <div class="hint" id="passHint">Enter at least 8 characters</div>
+    </div>
+    <div class="field">
+      <label for="dob">Date of Birth <span style="color:red">*</span></label>
+      <input type="date" id="dob" name="dateOfBirth" required max="2006-01-01" oninput="checkStep2()"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="advance(1)">← Back</button>
+      <button class="btn btn-primary" id="btnNext2" disabled onclick="advance(3)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Preferences -->
+  <div class="step" id="s3">
+    <div class="field">
+      <label for="country">Country</label>
+      <select id="country" name="country">
+        <option value="">-- Select --</option>
+        <option value="US">United States</option>
+        <option value="CA">Canada</option>
+        <option value="UK">United Kingdom</option>
+        <option value="AU">Australia</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="timezone">Time Zone</label>
+      <select id="timezone" name="timezone">
+        <option value="">-- Select --</option>
+        <option value="ET">Eastern (ET)</option>
+        <option value="CT">Central (CT)</option>
+        <option value="MT">Mountain (MT)</option>
+        <option value="PT">Pacific (PT)</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="advance(2)">← Back</button>
+      <button class="btn btn-primary" onclick="alert('PracticeMode: Submission blocked.')">Create Account</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function advance(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(`s${n}`).classList.add('active');
+    const pct = n === 1 ? 33 : n === 2 ? 66 : 100;
+    document.getElementById('progressFill').style.width = pct + '%';
+    const titles = { 1:'Step 1 of 3 — Basic Info', 2:'Step 2 of 3 — Security', 3:'Step 3 of 3 — Preferences' };
+    document.getElementById('stepHint').textContent = titles[n] || '';
+  }
+
+  function checkStep1() {
+    const name = document.getElementById('uname').value.trim();
+    const email = document.getElementById('uemail').value.trim();
+    document.getElementById('btnNext1').disabled = !(name.length >= 2 && email.includes('@'));
+  }
+
+  function checkStep2() {
+    const pass = document.getElementById('pass').value;
+    const dob  = document.getElementById('dob').value;
+    const hint = document.getElementById('passHint');
+    if (pass.length >= 8) hint.style.color = '#10b981';
+    else hint.style.color = '#e53e3e';
+    document.getElementById('btnNext2').disabled = !(pass.length >= 8 && dob);
+  }
+</script>
+</body>
+</html>

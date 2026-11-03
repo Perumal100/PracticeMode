@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 9 — File Upload Required</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:24px; }
+    .field { margin-bottom:18px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#333; }
+    input[type="text"], input[type="email"] {
+      width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px;
+    }
+    input:focus { border-color:#6366f1; outline:none; }
+    .upload-zone {
+      border:2px dashed #c7d2fe; border-radius:8px; padding:24px; text-align:center;
+      cursor:pointer; transition:.2s; background:#fafaff;
+    }
+    .upload-zone:hover { border-color:#6366f1; background:#f0f0ff; }
+    .upload-zone p { font-size:13px; color:#777; margin-top:6px; }
+    .upload-zone .icon { font-size:28px; }
+    .upload-zone input[type="file"] { display:none; }
+    .upload-note { font-size:11px; color:#f59e0b; background:#fef3c7; border-radius:6px; padding:8px 10px; margin-top:8px; }
+    .btn-row { display:flex; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 24px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; background:#6366f1; color:#fff; }
+    .btn-back { background:#eee; color:#333; }
+    .step { display:none; }
+    .step.active { display:block; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Document Submission</h1>
+  <p class="subtitle">Required file upload: on local fixtures PracticeMode attaches a synthetic sample file; on external sites it pauses and asks you to attach one.</p>
+
+  <div class="step active" id="s1">
+    <p style="font-size:12px;color:#666;margin-bottom:14px">Step 1 of 3 — Personal Details</p>
+    <div class="field">
+      <label for="f-name">Full Name *</label>
+      <input type="text" id="f-name" name="fullName" required placeholder="Alex Example"/>
+    </div>
+    <div class="field">
+      <label for="f-email">Email *</label>
+      <input type="email" id="f-email" name="email" required placeholder="alex@example.com"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="goTo(2)">Next →</button>
+    </div>
+  </div>
+
+  <div class="step" id="s2">
+    <p style="font-size:12px;color:#666;margin-bottom:14px">Step 2 of 3 — Document Upload</p>
+
+    <div class="field">
+      <label>Resume / CV <span style="color:red">*</span></label>
+      <label class="upload-zone" for="resume-upload">
+        <div class="icon">📄</div>
+        <div style="font-weight:600;font-size:14px">Upload Resume</div>
+        <p>PDF or DOCX, max 5MB</p>
+        <input type="file" id="resume-upload" name="resume" required accept=".pdf,.doc,.docx" aria-label="Upload Resume"/>
+      </label>
+      <div class="upload-note">⚠️ On external sites PracticeMode pauses here and asks you to attach a file. On local fixtures it attaches a synthetic sample file.</div>
+      <div class="upload-note" id="resumeError" style="display:none;color:#b91c1c">Please attach your resume to continue.</div>
+    </div>
+
+    <div class="field">
+      <label>Cover Letter (optional)</label>
+      <label class="upload-zone" for="cover-upload">
+        <div class="icon">📝</div>
+        <div style="font-weight:600;font-size:14px">Upload Cover Letter</div>
+        <p>PDF only, max 2MB</p>
+        <input type="file" id="cover-upload" name="coverLetter" accept=".pdf" aria-label="Cover Letter Upload"/>
+      </label>
+    </div>
+
+    <div class="field">
+      <label>Portfolio / Work Samples (optional)</label>
+      <label class="upload-zone" for="portfolio-upload">
+        <div class="icon">🗂️</div>
+        <div style="font-weight:600;font-size:14px">Upload Portfolio</div>
+        <p>ZIP, PDF, or image files</p>
+        <input type="file" id="portfolio-upload" name="portfolio" multiple accept=".pdf,.zip,.png,.jpg" aria-label="Portfolio Upload"/>
+      </label>
+    </div>
+
+    <div class="btn-row" style="gap:10px">
+      <button class="btn btn-back" style="background:#eee;color:#333" onclick="goTo(1)">← Back</button>
+      <button class="btn" onclick="toReview()">Next →</button>
+    </div>
+  </div>
+  <div class="step" id="s3">
+    <p style="font-size:12px;color:#666;margin-bottom:14px">Step 3 of 3 — Review</p>
+    <p style="font-size:13px">Attached: <span id="attachedName">—</span></p>
+    <div class="btn-row" style="gap:10px">
+      <button class="btn btn-back" style="background:#eee;color:#333" onclick="goTo(2)">← Back</button>
+      <button class="btn" onclick="alert('PracticeMode: Blocked.')">Submit Documents</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function toReview() {
+    const file = document.getElementById('resume-upload').files[0];
+    document.getElementById('resumeError').style.display = file ? 'none' : 'block';
+    if (!file) return;
+    document.getElementById('attachedName').textContent = file.name;
+    goTo(3);
+  }
+  function goTo(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(`s${n}`).classList.add('active');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 10 — Cyclic Navigation</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; }
+    input, select { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; }
+    input:focus { border-color:#6366f1; outline:none; }
+    .btn-row { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 22px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-warning { background:#f59e0b; color:#fff; }
+    .btn-back { background:#eee; color:#333; }
+    .step { display:none; }
+    .step.active { display:block; }
+    .cycle-indicator { font-size:12px; color:#999; margin-bottom:14px; background:#f3f4f6; border-radius:6px; padding:6px 10px; }
+    .loop-warning { background:#fef2f2; border:1.5px solid #fca5a5; border-radius:8px; padding:12px; font-size:13px; color:#b91c1c; margin-bottom:14px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Cyclic Navigation Test</h1>
+  <p class="subtitle">Step A → Step B → Step A (loop). Step B's Next button returns to A; the extension must detect the loop and stop.</p>
+
+  <div class="step active" id="sA">
+    <div class="cycle-indicator" id="visitCounter">Current: Step A | Visits to A: <span id="countA">1</span></div>
+    <p style="font-size:13px;color:#444;margin-bottom:16px">Step A — this step cycles back from Step B.</p>
+    <div class="field">
+      <label for="a-name">Name</label>
+      <input type="text" id="a-name" name="nameA" placeholder="Alex Example"/>
+    </div>
+    <div class="field">
+      <label for="a-option">Choice</label>
+      <select id="a-option" name="choiceA">
+        <option value="">-- Select --</option>
+        <option value="x">Option X</option>
+        <option value="y">Option Y</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="goB()">Continue to B →</button>
+    </div>
+  </div>
+
+  <div class="step" id="sB">
+    <div class="cycle-indicator">Current: Step B | Visits to B: <span id="countB">0</span></div>
+    <div class="loop-warning">⚠️ This step navigates back to Step A — creating a loop. PracticeMode should detect this via page signature comparison.</div>
+    <div class="field">
+      <label for="b-note">Note (Step B)</label>
+      <input type="text" id="b-note" name="noteB" placeholder="Enter a note…"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="goA()">← Back to A (Loop!)</button>
+      <button class="btn btn-warning" onclick="goA()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let countA = 1, countB = 0;
+  function goB() {
+    countB++;
+    document.getElementById('countB').textContent = countB;
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById('sB').classList.add('active');
+  }
+  function goA() {
+    countA++;
+    document.getElementById('countA').textContent = countA;
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById('sA').classList.add('active');
+  }
+</script>
+</body>
+</html>

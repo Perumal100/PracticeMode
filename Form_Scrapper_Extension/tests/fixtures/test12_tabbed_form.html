@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 12 — Tabbed Multi-Step Form</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:0; width:100%; max-width:540px; overflow:hidden; }
+    /* Tab bar */
+    .tab-bar { display:flex; border-bottom:2px solid #e5e7eb; background:#f9fafb; }
+    .tab {
+      flex:1; padding:14px 10px; text-align:center; font-size:12px; font-weight:600;
+      color:#9ca3af; cursor:pointer; transition:.2s; border-bottom:3px solid transparent;
+      margin-bottom:-2px; position:relative;
+    }
+    .tab.active { color:#6366f1; border-bottom-color:#6366f1; background:#fff; }
+    .tab.disabled { cursor:not-allowed; opacity:.4; }
+    .tab .tab-num {
+      width:20px; height:20px; border-radius:50%; background:#e5e7eb;
+      display:inline-flex; align-items:center; justify-content:center;
+      font-size:11px; margin-right:5px; color:#555;
+    }
+    .tab.active .tab-num { background:#6366f1; color:#fff; }
+    .tab.done .tab-num { background:#10b981; color:#fff; }
+    /* Panel */
+    .panel { padding:28px; display:none; }
+    .panel.active { display:block; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#333; }
+    input, select, textarea { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    input:focus, select:focus { border-color:#6366f1; outline:none; }
+    textarea { resize:vertical; min-height:70px; }
+    .btn-row { display:flex; gap:10px; justify-content:space-between; margin-top:20px; }
+    .btn { padding:10px 22px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-back { background:#eee; color:#333; }
+    .section-title { font-size:16px; font-weight:700; margin-bottom:4px; }
+    .section-sub { font-size:12px; color:#888; margin-bottom:20px; }
+    .radio-row { display:flex; gap:12px; flex-wrap:wrap; }
+    .radio-opt { display:flex; align-items:center; gap:5px; font-size:14px; cursor:pointer; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <!-- Tab Navigation (wizard-style tabs) -->
+  <div class="tab-bar" role="tablist">
+    <div class="tab active" id="tab1" role="tab" aria-selected="true" aria-controls="panel1" onclick="switchTab(1)">
+      <span class="tab-num">1</span>Personal
+    </div>
+    <div class="tab disabled" id="tab2" role="tab" aria-selected="false" aria-controls="panel2">
+      <span class="tab-num">2</span>Address
+    </div>
+    <div class="tab disabled" id="tab3" role="tab" aria-selected="false" aria-controls="panel3">
+      <span class="tab-num">3</span>Goals
+    </div>
+    <div class="tab disabled" id="tab4" role="tab" aria-selected="false" aria-controls="panel4">
+      <span class="tab-num">4</span>Review
+    </div>
+  </div>
+
+  <!-- Panel 1: Personal -->
+  <div class="panel active" id="panel1" role="tabpanel" aria-labelledby="tab1">
+    <div class="section-title">Personal Information</div>
+    <div class="section-sub">Step 1 of 4 — Tell us about yourself</div>
+    <div class="field"><label for="t-fname">First Name *</label><input type="text" id="t-fname" name="firstName" required placeholder="Alex"/></div>
+    <div class="field"><label for="t-lname">Last Name *</label><input type="text" id="t-lname" name="lastName" required placeholder="Example"/></div>
+    <div class="field"><label for="t-email">Email *</label><input type="email" id="t-email" name="email" required placeholder="alex@example.com"/></div>
+    <div class="field"><label for="t-phone">Phone</label><input type="tel" id="t-phone" name="phone" placeholder="212-555-0100"/></div>
+    <div class="field"><label for="t-dob">Date of Birth</label><input type="date" id="t-dob" name="dateOfBirth"/></div>
+    <div class="btn-row">
+      <div></div>
+      <button class="btn btn-primary" onclick="nextTab(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Panel 2: Address -->
+  <div class="panel" id="panel2" role="tabpanel" aria-labelledby="tab2">
+    <div class="section-title">Address Details</div>
+    <div class="section-sub">Step 2 of 4</div>
+    <div class="field"><label for="t-street">Street Address *</label><input type="text" id="t-street" name="streetAddress" required placeholder="123 Main St"/></div>
+    <div class="field"><label for="t-city">City *</label><input type="text" id="t-city" name="city" required placeholder="New York"/></div>
+    <div class="field"><label for="t-state">State</label>
+      <select id="t-state" name="state">
+        <option value="">-- Select state --</option>
+        <option value="NY">New York</option>
+        <option value="CA">California</option>
+        <option value="TX">Texas</option>
+        <option value="FL">Florida</option>
+        <option value="IL">Illinois</option>
+      </select>
+    </div>
+    <div class="field"><label for="t-zip">ZIP Code *</label><input type="text" id="t-zip" name="zipCode" required pattern="\d{5}" placeholder="10001"/></div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="nextTab(1)">← Back</button>
+      <button class="btn btn-primary" onclick="nextTab(3)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Panel 3: Goals -->
+  <div class="panel" id="panel3" role="tabpanel" aria-labelledby="tab3">
+    <div class="section-title">Your Goals</div>
+    <div class="section-sub">Step 3 of 4</div>
+    <div class="field">
+      <label>Primary Interest *</label>
+      <div class="radio-row">
+        <label class="radio-opt"><input type="radio" name="interest" value="tech" required/> Technology</label>
+        <label class="radio-opt"><input type="radio" name="interest" value="art"/> Arts</label>
+        <label class="radio-opt"><input type="radio" name="interest" value="science"/> Science</label>
+        <label class="radio-opt"><input type="radio" name="interest" value="business"/> Business</label>
+      </div>
+    </div>
+    <div class="field">
+      <label for="t-goal">Short-term Goal</label>
+      <input type="text" id="t-goal" name="shortTermGoal" placeholder="What do you want to achieve in 6 months?"/>
+    </div>
+    <div class="field">
+      <label for="t-notes">Additional Notes</label>
+      <textarea id="t-notes" name="additionalNotes" placeholder="Any other information…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="nextTab(2)">← Back</button>
+      <button class="btn btn-primary" onclick="nextTab(4)">Review →</button>
+    </div>
+  </div>
+
+  <!-- Panel 4: Review -->
+  <div class="panel" id="panel4" role="tabpanel" aria-labelledby="tab4">
+    <div class="section-title">Review Your Application</div>
+    <div class="section-sub">Final step — PracticeMode stops here.</div>
+    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:14px;font-size:13px;color:#166534;margin-bottom:16px;">
+      ✅ All steps captured. PracticeMode stops before final submission.
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="nextTab(3)">← Back</button>
+      <button class="btn btn-primary" style="background:#10b981" onclick="alert('PracticeMode: Blocked — final submission.')">Finish & Submit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let unlockedTabs = new Set([1]);
+  function nextTab(n) {
+    unlockedTabs.add(n);
+    switchTab(n);
+  }
+  function switchTab(n) {
+    if (!unlockedTabs.has(n)) return;
+    // Panels
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`panel${n}`).classList.add('active');
+    // Tabs
+    document.querySelectorAll('.tab').forEach(t => { t.classList.remove('active'); t.classList.add('disabled'); });
+    unlockedTabs.forEach(u => {
+      const tab = document.getElementById(`tab${u}`);
+      if (tab) { tab.classList.remove('disabled'); }
+    });
+    const active = document.getElementById(`tab${n}`);
+    if (active) { active.classList.add('active'); active.classList.remove('disabled'); }
+    // Mark previous tabs done
+    for (let i = 1; i < n; i++) {
+      const t = document.getElementById(`tab${i}`);
+      if (t) t.classList.add('done');
+    }
+    // Update aria
+    document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected','false'));
+    if (active) active.setAttribute('aria-selected','true');
+  }
+</script>
+</body>
+</html>

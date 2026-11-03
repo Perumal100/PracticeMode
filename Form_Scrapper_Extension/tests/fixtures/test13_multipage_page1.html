@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 13 — Multi-page form with full reloads (page 1)</title>
+  <link rel="stylesheet" href="_shared.css"/>
+</head>
+<body>
+<div class="card">
+  <h1>Volunteer Application</h1>
+  <p class="step-indicator">Step 1 of 3 — Contact</p>
+  <!-- A classic server-rendered form: each step is a separate page load. -->
+  <form action="test13_multipage_page2.html" method="get">
+    <div class="field">
+      <label for="first">First name *</label>
+      <input id="first" name="firstName" required autocomplete="given-name"/>
+    </div>
+    <div class="field">
+      <label for="last">Last name *</label>
+      <input id="last" name="lastName" required autocomplete="family-name"/>
+    </div>
+    <div class="field">
+      <label for="mail">Email *</label>
+      <input id="mail" name="email" type="email" required autocomplete="email"/>
+    </div>
+    <div class="btn-row"><button class="btn" type="submit">Continue</button></div>
+  </form>
+</div>
+</body>
+</html>

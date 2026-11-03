@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 13 — Multi-page form with full reloads (page 2)</title>
+  <link rel="stylesheet" href="_shared.css"/>
+</head>
+<body>
+<div class="card">
+  <h1>Volunteer Application</h1>
+  <p class="step-indicator">Step 2 of 3 — Availability</p>
+  <form action="test13_multipage_page3.html" method="get">
+    <div class="field">
+      <label for="shift">Preferred shift *</label>
+      <select id="shift" name="shift" required>
+        <option value="">Choose a shift</option>
+        <option value="morning">Morning (8am–12pm)</option>
+        <option value="afternoon">Afternoon (12pm–4pm)</option>
+        <option value="evening">Evening (4pm–8pm)</option>
+      </select>
+    </div>
+    <fieldset class="field" style="border:none;padding:0">
+      <legend style="font-size:13px;font-weight:600;margin-bottom:5px">Available on weekends? *</legend>
+      <label class="choice"><input type="radio" name="weekends" value="yes" required/> Yes</label>
+      <label class="choice"><input type="radio" name="weekends" value="no"/> No</label>
+    </fieldset>
+    <div class="field">
+      <label for="notes">Anything we should know?</label>
+      <textarea id="notes" name="notes" maxlength="300"></textarea>
+    </div>
+    <div class="btn-row">
+      <a class="btn btn-back" href="test13_multipage_page1.html">Back</a>
+      <button class="btn" type="submit">Next</button>
+    </div>
+  </form>
+</div>
+</body>
+</html>
