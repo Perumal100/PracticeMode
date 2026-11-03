@@ -2,7 +2,7 @@
 
 The backlog reflects the accepted Sprint 1 scope and Sprint 2 design. The 16 MVP stories form the end-to-end practice workflow; stretch and out-of-scope stories are retained to keep prioritisation explicit.
 
-Sprint 3 delivered the import → review → practice workflow (11 MVP stories). The instructor stories (US-03, US-05, US-22) and the guidance stories (US-09, US-12, US-18) stay in the backlog for Sprint 4. "Implemented" means the code, tests and demo walkthrough pass on `main`. A story counts as Done once a teammate has reviewed it.
+Sprint 3 delivered the import → review → practice workflow (10 of the 16 MVP stories). The instructor stories (US-03, US-05, US-22) and the guidance stories (US-09, US-12, US-18) stay in the backlog for Sprint 4. "Implemented" means the code, tests and demo walkthrough pass on `main`. A story counts as Done once a teammate has reviewed it.
 
 ## MVP
 
