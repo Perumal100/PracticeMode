@@ -1,7 +1,7 @@
 // US-11 AC-01: one supported input control per extracted field.
 import { Checkbox, Input, NativeSelect, Textarea } from '@/components/ui/input.jsx';
 
-const INPUT_TYPES = { text: 'text', email: 'email', tel: 'tel', number: 'number', date: 'date' };
+const INPUT_TYPES = { text: 'text', email: 'email', tel: 'tel', url: 'url', number: 'number', date: 'date' };
 
 export default function FieldInput({ field, value, disabled, invalid, onChange, onBlur, describedBy }) {
   const id = `field-${field.id}`;
@@ -37,6 +37,7 @@ export default function FieldInput({ field, value, disabled, invalid, onChange, 
       {...common}
       type={type}
       inputMode={type === 'number' ? 'decimal' : undefined}
+      placeholder={type === 'url' ? 'https://' : undefined}
       className={type === 'date' ? 'w-auto' : undefined}
       value={value ?? ''}
       onChange={(e) => emit(e.target.value)}

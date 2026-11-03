@@ -13,12 +13,13 @@ export const FIELD_TYPES = [
   ['textarea', 'Long text'],
   ['email', 'Email'],
   ['tel', 'Phone'],
+  ['url', 'Link'],
   ['number', 'Number'],
   ['date', 'Date'],
   ['select', 'Choice list'],
   ['checkbox', 'Checkbox'],
 ];
-const LENGTH_TYPES = new Set(['text', 'textarea', 'email', 'tel']);
+const LENGTH_TYPES = new Set(['text', 'textarea', 'email', 'tel', 'url']);
 
 /** First readable message from an API error body. */
 export function apiErrorMessage(error, fallback) {

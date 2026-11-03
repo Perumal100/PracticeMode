@@ -56,7 +56,7 @@ class DecisionRequestSerializer(serializers.Serializer):
 # approve a form that learners can never start (422 UNSUPPORTED_FORM_SCHEMA).
 LENGTH_RULES = {"minLength", "maxLength"}
 SUPPORTED_RULES = {
-    "text": LENGTH_RULES, "email": LENGTH_RULES, "tel": LENGTH_RULES, "textarea": LENGTH_RULES,
+    "text": LENGTH_RULES, "email": LENGTH_RULES, "tel": LENGTH_RULES, "textarea": LENGTH_RULES, "url": LENGTH_RULES,
     "select": LENGTH_RULES | {"allowedValues"}, "number": {"min", "max"}, "date": set(), "checkbox": set(),
 }
 

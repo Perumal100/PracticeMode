@@ -78,6 +78,14 @@ class ReviewerFormEditingTests(TestCase):
         self.email.refresh_from_db()
         self.assertEqual((self.email.label, self.email.validation), ("Email", {}))
 
+    def test_reviewer_marks_a_text_field_as_a_link(self):
+        response = self.client.patch(self.field_url(self.name), {"input_type": "url", "validation": {"maxLength": 255}}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.name.refresh_from_db()
+        self.assertEqual((self.name.input_type, self.name.validation), ("url", {"maxLength": 255}))
+        refused = self.client.patch(self.field_url(self.name), {"validation": {"min": 1}}, format="json")
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_reviewer_adds_a_missing_field_at_the_end(self):
         response = self.client.post(self.url("review-field-list"), {
             "label": "LinkedIn profile", "input_type": "text", "validation": {"maxLength": 200},

@@ -2,15 +2,21 @@
 from datetime import date
 from decimal import Decimal, InvalidOperation
 import math
+import re
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
+from django.core.validators import URLValidator, validate_email
 
 from .errors import AttemptError
 
-TEXT_TYPES = {"text", "email", "tel", "textarea", "select", "date"}
+TEXT_TYPES = {"text", "email", "tel", "textarea", "select", "date", "url"}
 SUPPORTED_TYPES = TEXT_TYPES | {"number", "checkbox"}
-LENGTH_TYPES = {"text", "email", "tel", "textarea", "select"}
+LENGTH_TYPES = {"text", "email", "tel", "textarea", "select", "url"}
+
+# Digits with the usual separators; 7 to 15 digits covers local and E.164 numbers.
+PHONE_CHARACTERS = re.compile(r"\+?[\d\s().-]+")
+validate_web_url = URLValidator(schemes=["http", "https"])
 
 
 def feedback(field, rule, message):
@@ -64,6 +70,25 @@ def _number(value):
     return result if result.is_finite() else None
 
 
+def _is_phone_number(value):
+    value = value.strip()
+    digits = sum(character.isdigit() for character in value)
+    return bool(PHONE_CHARACTERS.fullmatch(value)) and 7 <= digits <= 15
+
+
+def _is_web_url(value):
+    """A web address; like most application forms, the https:// may be left off."""
+    value = value.strip()
+    if not re.match(r"[a-z][a-z0-9+.-]*://", value, re.IGNORECASE):
+        value = f"https://{value}"
+    try:
+        validate_web_url(value)
+    except ValidationError:
+        return False
+    # "name@host" passes as a URL with a login, but here it is a mistyped email.
+    return urlsplit(value).username is None
+
+
 def validate_draft(field, value):
     """Reject incompatible JSON shapes, but preserve incomplete/invalid drafts."""
     if value is None:
@@ -94,6 +119,12 @@ def validation_feedback(fields, answers):
                 validate_email(value)
             except ValidationError:
                 results.append(feedback(field, "FORMAT", "Enter a valid email address."))
+        elif field.input_type == "tel":
+            if not _is_phone_number(value):
+                results.append(feedback(field, "FORMAT", "Enter a valid phone number using digits, spaces, and + ( ) - only."))
+        elif field.input_type == "url":
+            if not _is_web_url(value):
+                results.append(feedback(field, "FORMAT", "Enter a valid link, such as https://www.linkedin.com/in/your-name."))
         elif field.input_type == "date":
             try:
                 if date.fromisoformat(value).isoformat() != value:

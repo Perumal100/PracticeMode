@@ -58,7 +58,7 @@ class FormField(models.Model):
     INPUT_TYPES = [
         ("text", "Text"), ("email", "Email"), ("tel", "Telephone"),
         ("number", "Number"), ("date", "Date"), ("select", "Select"),
-        ("checkbox", "Checkbox"), ("textarea", "Text area"),
+        ("checkbox", "Checkbox"), ("textarea", "Text area"), ("url", "Link"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

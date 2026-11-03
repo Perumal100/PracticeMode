@@ -38,8 +38,27 @@ class StoredValidationTests(SimpleTestCase):
             self.assertEqual(self.rules_for(field, valid), [])
             self.assertEqual(self.rules_for(field, invalid), ["FORMAT"])
 
+    def test_link_format(self):
+        field = self.field("url", validation={"maxLength": 40})
+        for value in ("https://www.linkedin.com/in/alex", "http://alex.dev", "github.com/alex", " alex.example.org/work "):
+            with self.subTest(value=value):
+                self.assertEqual(self.rules_for(field, value), [])
+        for value in ("sfnifj", "just some words", "https://", "ftp://files.example.org", "javascript:alert(1)", "alex@example.org"):
+            with self.subTest(value=value):
+                self.assertEqual(self.rules_for(field, value), ["FORMAT"])
+        self.assertEqual(self.rules_for(field, "https://example.org/" + "a" * 30), ["MAX_LENGTH"])
+
+    def test_phone_format(self):
+        field = self.field("tel")
+        for value in ("+1 (212) 555-0147", "212.555.0147", "02079460958"):
+            with self.subTest(value=value):
+                self.assertEqual(self.rules_for(field, value), [])
+        for value in ("sfnifj", "555-01", "call me", "+1 212 555 0147 0000 99", "212-555-0147 ext. 9"):
+            with self.subTest(value=value):
+                self.assertEqual(self.rules_for(field, value), ["FORMAT"])
+
     def test_optional_empty_values_do_not_generate_format_errors(self):
-        for input_type in ("text", "email", "date", "number", "tel", "textarea"):
+        for input_type in ("text", "email", "date", "number", "tel", "textarea", "url"):
             field = self.field(input_type)
             for value in (None, "", " "):
                 self.assertEqual(self.rules_for(field, value), [])

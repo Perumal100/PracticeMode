@@ -11,7 +11,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 3 goal** | A Form Reviewer can import a real web form with the browser extension, verify and correct it, and publish it. A learner can then find that form, practise it with autosave, and get feedback on their answers. |
 | **Status** | 10 of 16 MVP user stories implemented; the other 6 stay in the product backlog for Sprint 4. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 132 backend · 78 frontend · 27 extension unit · 26 extension end-to-end (Playwright) |
+| **Tests** | 135 backend · 78 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -66,7 +66,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - required markers, and progress on required questions
   - autosave with a status under each answer, and an overall "All changes saved" indicator
   - resume after a reload
-- **Submission and feedback:** asks before submitting with required questions unanswered. Afterwards, a summary links each problem to its field, and the answers lock.
+- **Submission and feedback:** asks before submitting with required questions unanswered. Answers are checked against their field's type (email, phone, link, date, number, choice) and limits. Afterwards, a summary links each problem to its field, and the answers lock.
 
 ### For Form Reviewers
 - **Dashboard:** counts of forms awaiting review, approved and rejected; a "New imports" panel; the queue with status tabs.
@@ -172,9 +172,9 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 132 backend tests
+.venv/bin/python manage.py test                     # 135 backend tests
 (cd frontend && npm test)                           # 78 frontend tests (Vitest + Testing Library)
-(cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 27 unit + 26 end-to-end
+(cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 26 end-to-end
 ```
 
 - Every implemented story has tests for its main path **and** for its error, edge or permission case (see the story table above).
@@ -301,9 +301,9 @@ PATCH /api/review/forms/{formId}
 
 The implementation reads the existing `FormField.required`, `input_type`, and `validation` JSON. It does not create a separate validation-rule or options model.
 
-- Text/email/tel/textarea/select accept string drafts; dates accept strings; number drafts accept strings or finite JSON numbers; checkboxes accept booleans. Null is allowed for an unanswered draft. Email, ISO date, and finite-number formats are checked at completion.
+- Text/email/tel/url/textarea/select accept string drafts; dates accept strings; number drafts accept strings or finite JSON numbers; checkboxes accept booleans. Null is allowed for an unanswered draft. Formats are checked at completion: email; phone (digits with `+ ( ) - .` and spaces, 7 to 15 digits); link (an `http`/`https` address with a real host name, where `https://` may be left off); ISO date; finite number.
 - Required fields use the stored flag; unchecked required checkboxes generate feedback. An optional stored `required` rule must agree with the flag.
-- `minLength`/`maxLength`: nonnegative integer bounds for text/email/tel/textarea/select.
+- `minLength`/`maxLength`: nonnegative integer bounds for text/email/tel/url/textarea/select.
 - `min`/`max`: finite numeric bounds for number fields.
 - `allowedValues`: an explicit nonempty, unique string list for select fields. No options are inferred. A select with no stored `allowedValues` is unsupported for starting an attempt.
 - Unknown rule keys, invalid parameters/ranges, unsupported field types (including file/radio), and missing select choices return `422 UNSUPPORTED_FORM_SCHEMA` with field/rule details. This check runs on creation, on the saved field during autosave, and across the form at completion. Unsupported rules are not silently treated as successful validation. Regex `pattern` rules are currently unsupported.

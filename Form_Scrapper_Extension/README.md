@@ -123,7 +123,8 @@ The reviewer can still correct the title, source URL and any field in the review
 
 | Captured | Imported as |
 | --- | --- |
-| `text`, `search`, `url` / `email` / `tel` / `textarea`, `richtext` | `text` / `email` / `tel` / `textarea`, keeping `minLength` and `maxLength` |
+| `text`, `search` / `url` / `email` / `tel` / `textarea`, `richtext` | `text` / `url` / `email` / `tel` / `textarea`, keeping `minLength` and `maxLength` |
+| a text box whose label, name, placeholder or `autocomplete` asks for a link (LinkedIn, GitHub, website, portfolio, URL) | `url`, with a note so the reviewer can confirm it |
 | `number`, `range` | `number`, keeping `min` and `max` as numbers |
 | `date` | `date` (date ranges are left out) |
 | `select`, `radio`, `button-group` | `select` with `validation.allowedValues` = the visible option labels, placeholders excluded |

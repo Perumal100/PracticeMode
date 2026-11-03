@@ -145,6 +145,7 @@ describe('buildFieldPayload', () => {
   it('keeps only the rules that fit the type', () => {
     expect(buildFieldPayload(draft({ inputType: 'date', minLength: '3', options: 'A' })).payload.validation).toEqual({});
     expect(buildFieldPayload(draft({ minLength: '2', maxLength: '40' })).payload.validation).toEqual({ minLength: 2, maxLength: 40 });
+    expect(buildFieldPayload(draft({ inputType: 'url', maxLength: '255', min: '1' })).payload).toMatchObject({ input_type: 'url', validation: { maxLength: 255 } });
   });
   it('catches mistakes before calling the server', () => {
     expect(buildFieldPayload(draft({ label: '  ' })).error).toMatch(/label/);
