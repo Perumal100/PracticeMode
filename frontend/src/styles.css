@@ -32,6 +32,8 @@ fieldset { border: 1px solid var(--border); border-radius: 6px; display: flex; f
 .form-list { list-style: none; padding: 0; }
 .form-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .field { margin: 14px 0; }
+.field > label { display: block; margin: 0 0 4px; }
+.field > input:not([type="checkbox"]), .field > select, .field > textarea { display: block; width: min(100%, 420px); box-sizing: border-box; }
 .field.has-error input, .field.has-error select, .field.has-error textarea { border-color: var(--danger); }
 .required { color: var(--danger); }
 .feedback { color: var(--danger); margin: 4px 0 0; padding-left: 18px; font-size: .9rem; }
