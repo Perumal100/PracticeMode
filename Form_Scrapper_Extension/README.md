@@ -100,7 +100,7 @@ Illustrative interchange format. PracticeMode's own storage and rendering format
 }
 ```
 
-URLs are stored without query strings or fragments. Option entries record the page's declared defaults (`defaultSelected`), never the current answer.
+`source.url` is the page in the address bar when extraction starts. For a form embedded in an iframe, such as a Greenhouse application on a company careers page, that is the careers page, not the iframe. The iframe's address is kept as `source.formUrl`, and the page title becomes `formTitle`. The source URL keeps identifying query parameters such as `gh_jid`. It drops the fragment and any parameter that looks like a credential, personal data or tracking (`token`, `session`, `email`, `utm_*` and similar). Step URLs are stored without query strings, because a GET form can put sample values there. Option entries record the page's declared defaults (`defaultSelected`), never the current answer.
 
 ## Sending to PracticeMode (API-15)
 
@@ -116,6 +116,8 @@ Setup:
 3. Capture a form, then press **Send to PracticeMode for review**. The copilot shows how many fields were imported and lists anything left out.
 
 What is sent: `{ title, source_url, source_available: true, fields: [{ position, label, input_type, required, validation }] }`. Only structure is sent, never typed values, placeholders, page defaults or internal option values.
+
+The reviewer can still correct the title, source URL and any field in the review screen before approving.
 
 `shared/import_payload.js` adapts the capture to what the backend can practise:
 

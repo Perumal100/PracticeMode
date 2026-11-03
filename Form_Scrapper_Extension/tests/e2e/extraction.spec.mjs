@@ -197,6 +197,16 @@ test('multi-page form: state survives full page reloads across URLs', async () =
   expect(findField(doc, 'Available on weekends?')).toMatchObject({ type: 'radio', required: true });
 });
 
+test('embedded form: the page in the address bar is the source, not the iframe', async () => {
+  const { doc, state } = await extract(`${env.base}/test16_embedded_form.html?gh_jid=8052118&utm_source=board&session_id=abc#apply`);
+  expect(state.isTopFrame).toBe(false);
+  expect(fieldLabels(doc.steps[0])).toEqual(['First Name', 'Last Name', 'Email Address', 'Phone Number']);
+  // The careers page with its job id; tracking and session parameters and the fragment are dropped.
+  expect(doc.source.url).toBe(`${env.base}/test16_embedded_form.html?gh_jid=8052118`);
+  expect(doc.source.formUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/test01_three_step_form\.html$/);
+  expect(doc.formTitle).toBe('Senior Software Engineer - Example Careers');
+});
+
 test('shadow DOM web components are extracted and navigated', async () => {
   const { doc, state } = await extract(`${env.base}/test15_shadow_dom.html`);
   expect(state.completionReason).toBe('reached_final_step');

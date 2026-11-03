@@ -85,7 +85,7 @@
     ctx = { ...ctx, ...next };
   }
 
-  function createState({ mode, settings, environment, frameId, isTopFrame }) {
+  function createState({ mode, settings, environment, frameId, isTopFrame, page }) {
     const now = Date.now();
     return {
       version: 3,
@@ -97,6 +97,10 @@
       status: 'running',
       environment,
       startUrl: PM.utils.safeUrl(location.href),
+      // The tab's own page (the address bar), which differs from location
+      // when the form is embedded in an iframe.
+      pageUrl: PM.exportBuilder?.cleanSourceUrl(page?.url || '') || null,
+      pageTitle: PM.utils.cleanText(page?.title || '').slice(0, 200) || null,
       origin: PM.safetyPolicy.originOf(location.href),
       formTitle: null,
       settings,

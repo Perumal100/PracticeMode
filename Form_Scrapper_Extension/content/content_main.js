@@ -555,7 +555,7 @@
   }
 
   // ── Commands ────────────────────────────────────────────────────────
-  async function start({ mode = 'auto' } = {}) {
+  async function start({ mode = 'auto', page } = {}) {
     await ensureContext();
     activeRun++;
     stopWatcher();
@@ -567,6 +567,7 @@
       environment: environment(),
       frameId: store.context.frameId,
       isTopFrame: window.top === window,
+      page,
     });
     state.message = mode === 'auto' ? 'Starting automatic extraction…' : 'Starting assisted extraction…';
     await store.replace(state);
@@ -574,13 +575,13 @@
     return { started: true };
   }
 
-  async function scan() {
+  async function scan({ page } = {}) {
     await ensureContext();
     activeRun++;
     stopWatcher();
     await store.clearControl();
     const settings = await store.loadSettings();
-    const state = store.createState({ mode: 'scan', settings, environment: environment(), frameId: store.context.frameId, isTopFrame: window.top === window });
+    const state = store.createState({ mode: 'scan', settings, environment: environment(), frameId: store.context.frameId, isTopFrame: window.top === window, page });
     state.message = 'Scanning the current step…';
     await store.replace(state);
     const allowed = policy.autoNavigationAllowed(location.href, await store.loadConsent()).allowed;
@@ -631,7 +632,7 @@
       switch (message.action) {
         case 'probe': return probe();
         case 'start': return start(message);
-        case 'scan': return scan();
+        case 'scan': return scan(message);
         case 'resume': return resume(message);
         case 'control': return onControl();
         case 'discard':
