@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 7 — Inaccessible Steps</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; }
+    input { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; }
+    input:focus { border-color:#6366f1; outline:none; }
+    .btn-row { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 24px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn-primary { background:#6366f1; color:#fff; }
+    .btn-back { background:#eee; color:#333; }
+    .step { display:none; }
+    .step.active { display:block; }
+    .blocked-step { background:#fef2f2; border:2px solid #fca5a5; border-radius:10px; padding:20px; text-align:center; }
+    .blocked-step h3 { color:#b91c1c; margin-bottom:8px; }
+    .blocked-step p { color:#555; font-size:13px; }
+    .captcha-sim {
+      border:2px solid #ddd; border-radius:8px; padding:16px;
+      display:flex; align-items:center; gap:12px; margin:16px 0;
+      background:#f9fafb; cursor:pointer; user-select:none;
+    }
+    .captcha-checkbox { width:24px; height:24px; border:2px solid #999; border-radius:4px; display:flex; align-items:center; justify-content:center; }
+    .captcha-label { font-size:13px; color:#333; }
+    .captcha-logo { margin-left:auto; text-align:center; font-size:10px; color:#999; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Secure Application</h1>
+  <p class="subtitle">Simulates inaccessible steps that require manual intervention.</p>
+
+  <!-- Step 1: Basic info -->
+  <div class="step active" id="s1">
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Step 1 of 3 — Contact Details</p>
+    <div class="field">
+      <label for="n1">Full Name <span style="color:red">*</span></label>
+      <input type="text" id="n1" name="fullName" required placeholder="Alex Example"/>
+    </div>
+    <div class="field">
+      <label for="e1">Email <span style="color:red">*</span></label>
+      <input type="email" id="e1" name="email" required placeholder="alex@example.com"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="goTo(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: CAPTCHA-protected -->
+  <div class="step" id="s2">
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Step 2 of 3 — Human Verification</p>
+    <p style="font-size:13px;color:#333;margin-bottom:16px">Please complete the CAPTCHA to continue.</p>
+    <div class="captcha-sim" id="captchaWidget" role="checkbox" aria-label="I am not a robot"
+         aria-checked="false" tabindex="0" onclick="completeCaptcha()">
+      <div class="captcha-checkbox" id="captchaCheck"></div>
+      <span class="captcha-label">I'm not a robot</span>
+      <div class="captcha-logo">reCAPTCHA<br/><small>Privacy · Terms</small></div>
+    </div>
+    <div id="captchaNote" class="blocked-step" style="display:none">
+      <h3>🔒 CAPTCHA Required</h3>
+      <p>PracticeMode cannot bypass CAPTCHA verification. Manual completion required to access Step 3.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="goTo(1)">← Back</button>
+      <button class="btn btn-primary" id="btnCaptchaNext" disabled onclick="goTo(3)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 3: Restricted (only accessible after manual CAPTCHA) -->
+  <div class="step" id="s3">
+    <p style="font-size:12px;color:#666;margin-bottom:16px">Step 3 of 3 — Secure Details</p>
+    <div class="field">
+      <label for="secField">Verified Account ID</label>
+      <input type="text" id="secField" name="accountId" placeholder="Auto-filled after verification"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="goTo(2)">← Back</button>
+      <button class="btn btn-primary" onclick="alert('PracticeMode: Blocked.')">Submit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function goTo(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(`s${n}`).classList.add('active');
+    if (n === 2) {
+      // Show captcha note after a moment
+      setTimeout(() => {
+        document.getElementById('captchaNote').style.display = 'block';
+      }, 800);
+    }
+  }
+  function completeCaptcha() {
+    const check = document.getElementById('captchaCheck');
+    check.innerHTML = '✓';
+    check.style.background = '#10b981';
+    check.style.color = '#fff';
+    check.style.borderColor = '#10b981';
+    document.getElementById('captchaWidget').setAttribute('aria-checked','true');
+    document.getElementById('btnCaptchaNext').disabled = false;
+    document.getElementById('captchaNote').style.display = 'none';
+  }
+</script>
+</body>
+</html>

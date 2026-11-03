@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 1 — Three-Step Form with Required Fields</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; display: flex; justify-content: center; padding: 40px 16px; }
+    .form-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.1); padding: 32px; width: 100%; max-width: 520px; }
+    h1 { font-size: 22px; margin-bottom: 6px; }
+    .step-indicator { font-size: 13px; color: #666; margin-bottom: 24px; }
+    .field { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: #333; }
+    input, select { width: 100%; padding: 10px 12px; border: 1.5px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+    input:focus, select:focus { border-color: #6366f1; }
+    .required::after { content: ' *'; color: #e53e3e; }
+    .btn-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+    .btn { padding: 10px 24px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-next { background: #6366f1; color: #fff; }
+    .btn-back { background: #eee; color: #333; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .error { color: #e53e3e; font-size: 11px; margin-top: 3px; display: none; }
+    .field.invalid .error { display: block; }
+    .field.invalid input, .field.invalid select { border-color: #e53e3e; }
+    .success-msg { text-align: center; padding: 20px; }
+    .success-msg h2 { color: #10b981; }
+  </style>
+</head>
+<body>
+<div class="form-card">
+  <h1>Job Application Form</h1>
+  <p class="step-indicator" id="stepLabel">Step 1 of 3 — Personal Information</p>
+
+  <!-- Step 1 -->
+  <div class="step active" id="step1" data-step="1">
+    <div class="field" id="f-fname">
+      <label class="required" for="fname">First Name</label>
+      <input type="text" id="fname" name="firstName" required minlength="2" maxlength="50" placeholder="Enter your first name"/>
+      <span class="error">First name is required (min 2 characters)</span>
+    </div>
+    <div class="field" id="f-lname">
+      <label class="required" for="lname">Last Name</label>
+      <input type="text" id="lname" name="lastName" required minlength="2" maxlength="50" placeholder="Enter your last name"/>
+      <span class="error">Last name is required</span>
+    </div>
+    <div class="field" id="f-email">
+      <label class="required" for="email">Email Address</label>
+      <input type="email" id="email" name="email" required placeholder="you@example.com"/>
+      <span class="error">Valid email is required</span>
+    </div>
+    <div class="field" id="f-phone">
+      <label for="phone">Phone Number</label>
+      <input type="tel" id="phone" name="phone" pattern="[0-9\-\+\(\)\s]{7,20}" placeholder="212-555-0100"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-next" type="button" onclick="goToStep(2)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="step" id="step2" data-step="2">
+    <div class="field" id="f-edu">
+      <label class="required" for="edu">Highest Education</label>
+      <select id="edu" name="education" required>
+        <option value="">-- Select --</option>
+        <option value="hs">High School</option>
+        <option value="assoc">Associate Degree</option>
+        <option value="bach">Bachelor's Degree</option>
+        <option value="mast">Master's Degree</option>
+        <option value="phd">PhD</option>
+      </select>
+      <span class="error">Please select your education level</span>
+    </div>
+    <div class="field" id="f-gradyear">
+      <label for="gradyear">Graduation Year</label>
+      <input type="number" id="gradyear" name="graduationYear" min="1970" max="2030" placeholder="2020"/>
+    </div>
+    <div class="field" id="f-school">
+      <label for="school">School / University</label>
+      <input type="text" id="school" name="school" placeholder="State University"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" type="button" onclick="goToStep(1)">← Back</button>
+      <button class="btn btn-next" type="button" onclick="goToStep(3)">Next →</button>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="step" id="step3" data-step="3">
+    <div class="field" id="f-position">
+      <label class="required" for="position">Position Applied For</label>
+      <input type="text" id="position" name="position" required placeholder="Software Engineer"/>
+      <span class="error">Position is required</span>
+    </div>
+    <div class="field" id="f-startdate">
+      <label for="startdate">Available Start Date</label>
+      <input type="date" id="startdate" name="startDate"/>
+    </div>
+    <div class="field" id="f-salary">
+      <label for="salary">Expected Salary (USD)</label>
+      <input type="number" id="salary" name="salary" min="20000" max="500000" placeholder="60000"/>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" type="button" onclick="goToStep(2)">← Back</button>
+      <button class="btn btn-next" type="button" id="btnReview" onclick="showReview()">Review Application →</button>
+    </div>
+  </div>
+
+  <!-- Final Review (do NOT submit) -->
+  <div class="step" id="step-final">
+    <div class="success-msg">
+      <h2>✅ Review Complete</h2>
+      <p style="margin-top:10px; color:#555; font-size:14px;">This is the review stage. PracticeMode stops here — no submission is performed.</p>
+      <button class="btn btn-next" style="margin-top:20px" type="button" id="finalSubmit" onclick="alert('PracticeMode: Submission blocked for safety.')">Submit Application</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const TOTAL = 3;
+  const stepTitles = {
+    1: 'Step 1 of 3 — Personal Information',
+    2: 'Step 2 of 3 — Education',
+    3: 'Step 3 of 3 — Experience',
+    'final': 'Review',
+  };
+
+  function goToStep(n) {
+    if (!validateStep(currentStep())) return;
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(`step${n}`).classList.add('active');
+    document.getElementById('stepLabel').textContent = stepTitles[n] || `Step ${n}`;
+  }
+
+  function showReview() {
+    if (!validateStep(currentStep())) return;
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById('step-final').classList.add('active');
+    document.getElementById('stepLabel').textContent = 'Review';
+  }
+
+  function currentStep() {
+    const active = document.querySelector('.step.active');
+    return active ? parseInt(active.id.replace('step','')) || 0 : 0;
+  }
+
+  function validateStep(stepNum) {
+    const step = document.getElementById(`step${stepNum}`);
+    if (!step) return true;
+    let valid = true;
+    step.querySelectorAll('[required]').forEach(el => {
+      const field = el.closest('.field');
+      if (!el.value.trim()) {
+        field?.classList.add('invalid');
+        valid = false;
+      } else {
+        field?.classList.remove('invalid');
+      }
+    });
+    return valid;
+  }
+</script>
+</body>
+</html>

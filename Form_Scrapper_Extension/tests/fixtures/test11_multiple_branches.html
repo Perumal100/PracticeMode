@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 11 — Multiple Conditional Branches</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:540px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:24px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#333; }
+    input, select, textarea { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    input:focus, select:focus { border-color:#6366f1; outline:none; }
+    .branch-section {
+      border-left:3px solid #c7d2fe; padding:12px 16px; margin:8px 0; background:#f8f7ff;
+      border-radius:0 8px 8px 0; display:none; animation:fadeIn .2s ease;
+    }
+    .branch-section.show { display:block; }
+    @keyframes fadeIn { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:translateX(0)} }
+    .branch-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#6366f1; margin-bottom:10px; }
+    .btn-row { display:flex; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 24px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; background:#6366f1; color:#fff; }
+    hr { border:none; border-top:1px solid #eee; margin:20px 0; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Complex Intake Form</h1>
+  <p class="subtitle">Multiple independent conditional branches — tests comprehensive branch discovery.</p>
+
+  <!-- Branch 1: Goal type -->
+  <div class="field">
+    <label for="goalType">Primary Goal <span style="color:red">*</span></label>
+    <select id="goalType" name="goalType" required onchange="branchGoal(this.value)">
+      <option value="">-- Select your goal --</option>
+      <option value="career">Career Change</option>
+      <option value="edu">Further Education</option>
+      <option value="personal">Personal Development</option>
+      <option value="business">Start a Business</option>
+    </select>
+  </div>
+  <div class="branch-section" id="branch-career">
+    <div class="branch-label">Career Change Details</div>
+    <div class="field"><label for="currentJob">Current Job Title</label><input type="text" id="currentJob" name="currentJobTitle" placeholder="e.g., Marketing Manager"/></div>
+    <div class="field"><label for="targetJob">Target Role</label><input type="text" id="targetJob" name="targetRole" placeholder="e.g., Software Engineer"/></div>
+    <div class="field"><label for="transitionTimeline">Timeline</label>
+      <select id="transitionTimeline" name="transitionTimeline">
+        <option value="">-- Select --</option>
+        <option value="3mo">Within 3 months</option>
+        <option value="6mo">3–6 months</option>
+        <option value="1yr">6–12 months</option>
+        <option value="2yr">1–2 years</option>
+      </select>
+    </div>
+  </div>
+  <div class="branch-section" id="branch-edu">
+    <div class="branch-label">Education Details</div>
+    <div class="field"><label for="targetProgram">Target Program</label><input type="text" id="targetProgram" name="targetProgram" placeholder="e.g., Master's in Data Science"/></div>
+    <div class="field"><label for="targetSchool">Preferred Institution</label><input type="text" id="targetSchool" name="preferredSchool" placeholder="e.g., NYU"/></div>
+    <div class="field"><label for="entranceYear">Entry Year</label><input type="number" id="entranceYear" name="entryYear" min="2025" max="2030" placeholder="2025"/></div>
+  </div>
+  <div class="branch-section" id="branch-personal">
+    <div class="branch-label">Personal Development</div>
+    <div class="field"><label for="devArea">Area of Focus</label>
+      <select id="devArea" name="developmentArea">
+        <option value="">-- Select --</option>
+        <option value="health">Health & Fitness</option>
+        <option value="finance">Financial Literacy</option>
+        <option value="creativity">Creativity & Arts</option>
+        <option value="relationships">Relationships</option>
+      </select>
+    </div>
+    <div class="field"><label for="devNotes">Goals Description</label><textarea id="devNotes" name="developmentNotes" placeholder="Describe your personal development goals…"></textarea></div>
+  </div>
+  <div class="branch-section" id="branch-business">
+    <div class="branch-label">Business Details</div>
+    <div class="field"><label for="bizIdea">Business Idea</label><input type="text" id="bizIdea" name="businessIdea" placeholder="One-sentence description"/></div>
+    <div class="field"><label for="bizStage">Current Stage</label>
+      <select id="bizStage" name="businessStage">
+        <option value="">-- Select --</option>
+        <option value="idea">Idea stage</option>
+        <option value="prototype">Prototype</option>
+        <option value="mvp">MVP / Early traction</option>
+        <option value="revenue">Revenue generating</option>
+      </select>
+    </div>
+    <div class="field"><label for="funding">Funding Status</label>
+      <select id="funding" name="fundingStatus">
+        <option value="">-- Select --</option>
+        <option value="bootstrapped">Bootstrapped</option>
+        <option value="seeking">Seeking investment</option>
+        <option value="funded">Already funded</option>
+      </select>
+    </div>
+  </div>
+
+  <hr/>
+
+  <!-- Branch 2: Prior experience with topic -->
+  <div class="field">
+    <label>Prior relevant experience?</label>
+    <select id="priorExp" name="priorExperience" onchange="branchExp(this.value)">
+      <option value="">-- Select --</option>
+      <option value="none">None</option>
+      <option value="some">Some (1–2 years)</option>
+      <option value="extensive">Extensive (3+ years)</option>
+    </select>
+  </div>
+  <div class="branch-section" id="branch-exp-some">
+    <div class="branch-label">Brief Experience</div>
+    <div class="field"><label for="expDesc">Describe your experience</label><input type="text" id="expDesc" name="experienceDescription" placeholder="Where / what did you do?"/></div>
+  </div>
+  <div class="branch-section" id="branch-exp-ext">
+    <div class="branch-label">Extensive Experience</div>
+    <div class="field"><label for="expYears">Years of Experience</label><input type="number" id="expYears" name="yearsExperience" min="3" max="40" placeholder="5"/></div>
+    <div class="field"><label for="expRole">Most Recent Role</label><input type="text" id="expRole" name="mostRecentRole" placeholder="e.g., Senior Developer"/></div>
+    <div class="field"><label for="expAchieve">Key Achievement</label><textarea id="expAchieve" name="keyAchievement" placeholder="Describe a key achievement…"></textarea></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="alert('PracticeMode: Blocked.')">Submit Intake</button>
+  </div>
+</div>
+
+<script>
+  function branchGoal(val) {
+    ['career','edu','personal','business'].forEach(b => {
+      document.getElementById(`branch-${b}`).classList.toggle('show', b === val);
+    });
+  }
+  function branchExp(val) {
+    document.getElementById('branch-exp-some').classList.toggle('show', val === 'some');
+    document.getElementById('branch-exp-ext').classList.toggle('show', val === 'extensive');
+  }
+</script>
+</body>
+</html>

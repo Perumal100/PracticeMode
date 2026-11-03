@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 5 — Validation Errors</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; }
+    input, select { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; }
+    input.error { border-color:#e53e3e; background:#fff5f5; }
+    input:focus { outline:none; border-color:#6366f1; }
+    .error-msg { color:#e53e3e; font-size:11px; margin-top:4px; display:none; }
+    .error-msg.show { display:block; }
+    .btn-row { display:flex; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 24px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; background:#6366f1; color:#fff; }
+    .alert { background:#fef2f2; border:1.5px solid #fca5a5; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px; color:#b91c1c; display:none; }
+    .alert.show { display:block; }
+      .step { display:none; }
+    .step.active { display:block; }
+    .hint { font-size:11px; color:#777; margin-top:3px; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Validated Sign-Up Form</h1>
+  <p class="subtitle">The site applies its own rules on top of the HTML attributes, so the first sample values are rejected and PracticeMode must read the messages and retry.</p>
+  <p class="hint" id="stepLabel">Step 1 of 2 — Account details</p>
+
+  <div class="alert" id="globalError" role="alert">Please fix the errors below before continuing.</div>
+
+  <form id="mainForm" class="step active" novalidate onsubmit="return handleStep1(event)">
+    <div class="field">
+      <label for="v-user">Username <span style="color:red">*</span></label>
+      <input type="text" id="v-user" name="username" required minlength="4" maxlength="20" pattern="[a-zA-Z0-9_]+" placeholder="4–20 letters, numbers or _"/>
+      <div class="error-msg" id="err-user">Username must include at least one number.</div>
+    </div>
+    <div class="field">
+      <label for="v-email">Email <span style="color:red">*</span></label>
+      <input type="email" id="v-email" name="email" required placeholder="you@example.com"/>
+      <div class="error-msg" id="err-email">Please enter a valid email address.</div>
+    </div>
+    <div class="field">
+      <label for="v-age">Age <span style="color:red">*</span></label>
+      <input type="number" id="v-age" name="age" required min="18" max="99" placeholder="Must be 18 or older"/>
+      <div class="error-msg" id="err-age">Age must be between 18 and 99.</div>
+    </div>
+    <div class="field">
+      <label for="v-zip">ZIP Code <span style="color:red">*</span></label>
+      <input type="text" id="v-zip" name="zipCode" required pattern="\d{5}" maxlength="5" placeholder="5-digit ZIP"/>
+      <div class="error-msg" id="err-zip">Please enter a valid 5-digit ZIP code.</div>
+    </div>
+    <div class="field">
+      <label for="v-phone">Phone <span style="color:red">*</span></label>
+      <input type="tel" id="v-phone" name="phone" required pattern="[\d\-\+\(\)\s]{10,20}" placeholder="212-555-0100"/>
+      <div class="error-msg" id="err-phone">Enter a valid phone number (10–20 digits/chars).</div>
+    </div>
+    <div class="field">
+      <label for="v-start">Start Date <span style="color:red">*</span></label>
+      <input type="date" id="v-start" name="startDate" required/>
+      <div class="error-msg" id="err-start">Start date must be in the future.</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" type="submit">Continue</button>
+    </div>
+  </form>
+
+  <div class="step" id="step2">
+    <div class="field">
+      <label><input type="checkbox" id="v-confirm" name="confirmFictional" required style="width:auto"/> I confirm these details are fictional practice data</label>
+    </div>
+    <div class="btn-row">
+      <button class="btn" type="button" onclick="alert('PracticeMode: Submission blocked in test.')">Register</button>
+    </div>
+  </div>
+</div>
+<script>
+  window.__attempts = 0;
+  function handleStep1(e) {
+    e.preventDefault();
+    window.__attempts++;
+    const today = new Date().toISOString().slice(0, 10);
+    const checks = [
+      { id: 'v-user',  err: 'err-user',  test: v => /^[a-zA-Z0-9_]{4,20}$/.test(v) && /\d/.test(v) },
+      { id: 'v-email', err: 'err-email', test: v => v.includes('@') && v.includes('.') },
+      { id: 'v-age',   err: 'err-age',   test: v => +v >= 18 && +v <= 99 },
+      { id: 'v-zip',   err: 'err-zip',   test: v => /^\d{5}$/.test(v) },
+      { id: 'v-phone', err: 'err-phone', test: v => /[\d\-\+\(\)\s]{10,20}/.test(v) },
+      { id: 'v-start', err: 'err-start', test: v => Boolean(v) && v > today },
+    ];
+    let valid = true;
+    checks.forEach(({ id, err, test }) => {
+      const input = document.getElementById(id);
+      const ok = test(input.value.trim());
+      input.classList.toggle('error', !ok);
+      input.setAttribute('aria-invalid', String(!ok));
+      document.getElementById(err).classList.toggle('show', !ok);
+      if (!ok) valid = false;
+    });
+    document.getElementById('globalError').classList.toggle('show', !valid);
+    if (!valid) return false;
+    document.getElementById('mainForm').classList.remove('active');
+    document.getElementById('step2').classList.add('active');
+    document.getElementById('stepLabel').textContent = 'Step 2 of 2 — Confirm';
+    return false;
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 8 — Final Submit Button</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:480px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:20px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; }
+    input, select, textarea { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    input:focus, textarea:focus { border-color:#6366f1; outline:none; }
+    textarea { resize:vertical; min-height:80px; }
+    .btn-row { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 24px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; }
+    .btn-next { background:#6366f1; color:#fff; }
+    .btn-back { background:#eee; color:#333; }
+    .btn-submit { background:#10b981; color:#fff; font-size:14px; padding:12px 32px; }
+    .step { display:none; }
+    .step.active { display:block; }
+    .review-section { background:#f8fafc; border-radius:8px; padding:14px 16px; margin-bottom:12px; }
+    .review-section h4 { font-size:12px; text-transform:uppercase; letter-spacing:.5px; color:#6366f1; margin-bottom:8px; }
+    .review-row { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; }
+    .review-label { color:#666; }
+    .review-value { font-weight:600; color:#333; }
+    .warning-banner { background:#fef3c7; border:1.5px solid #fbbf24; border-radius:8px; padding:12px; margin-bottom:16px; font-size:12px; color:#92400e; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Scholarship Application</h1>
+  <p class="subtitle">Tests that PracticeMode correctly identifies and stops at the final Submit button.</p>
+
+  <!-- Step 1 -->
+  <div class="step active" id="s1">
+    <p style="font-size:12px;color:#666;margin-bottom:14px">Step 1 of 2 — Applicant Information</p>
+    <div class="field"><label for="ap-name">Full Name *</label><input type="text" id="ap-name" name="fullName" required placeholder="Alex Example"/></div>
+    <div class="field"><label for="ap-email">Email *</label><input type="email" id="ap-email" name="email" required placeholder="alex@example.com"/></div>
+    <div class="field"><label for="ap-gpa">GPA</label><input type="number" id="ap-gpa" name="gpa" min="0" max="4" step="0.1" placeholder="3.8"/></div>
+    <div class="field">
+      <label for="ap-essay">Why do you deserve this scholarship?</label>
+      <textarea id="ap-essay" name="essay" minlength="100" placeholder="Min 100 characters…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-next" type="button" onclick="goStep(2)">Next: Review →</button>
+    </div>
+  </div>
+
+  <!-- Step 2: Final Review -->
+  <div class="step" id="s2">
+    <p style="font-size:12px;color:#666;margin-bottom:14px">Step 2 of 2 — Review & Submit</p>
+    <div class="warning-banner">
+      ⚠️ <strong>Final Submission:</strong> Clicking "Submit Application" below will permanently submit your application.
+      PracticeMode will stop before this point.
+    </div>
+    <div class="review-section">
+      <h4>Your Information</h4>
+      <div class="review-row"><span class="review-label">Name</span><span class="review-value" id="rv-name">—</span></div>
+      <div class="review-row"><span class="review-label">Email</span><span class="review-value" id="rv-email">—</span></div>
+      <div class="review-row"><span class="review-label">GPA</span><span class="review-value" id="rv-gpa">—</span></div>
+    </div>
+    <div class="review-section">
+      <h4>Essay Preview</h4>
+      <p style="font-size:13px;color:#555" id="rv-essay">—</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-back" onclick="goStep(1)">← Edit</button>
+      <button class="btn btn-submit" type="button" onclick="alert('PracticeMode: Final submission blocked.')">Submit Application</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function goStep(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(`s${n}`).classList.add('active');
+    if (n === 2) {
+      document.getElementById('rv-name').textContent  = document.getElementById('ap-name').value || '—';
+      document.getElementById('rv-email').textContent = document.getElementById('ap-email').value || '—';
+      document.getElementById('rv-gpa').textContent   = document.getElementById('ap-gpa').value || '—';
+      document.getElementById('rv-essay').textContent = document.getElementById('ap-essay').value || '—';
+    }
+  }
+</script>
+</body>
+</html>

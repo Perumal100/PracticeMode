@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 4 — Conditional Yes/No Sections</title>
+  <style>
+    body { font-family:system-ui,sans-serif; background:#f5f5f5; display:flex; justify-content:center; padding:40px 16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1); padding:32px; width:100%; max-width:520px; }
+    h1 { font-size:20px; margin-bottom:4px; }
+    .subtitle { font-size:13px; color:#666; margin-bottom:24px; }
+    .field { margin-bottom:16px; }
+    label { display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#333; }
+    input, select, textarea { width:100%; padding:10px 12px; border:1.5px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    input:focus, select:focus { border-color:#6366f1; outline:none; }
+    .radio-group { display:flex; gap:12px; margin-top:4px; }
+    .radio-item { display:flex; align-items:center; gap:6px; font-size:14px; cursor:pointer; }
+    .conditional-section {
+      border:1.5px solid #e0e7ff;
+      border-radius:8px;
+      padding:16px;
+      margin-bottom:16px;
+      background:#f5f3ff;
+      display:none;
+      animation: fadeSlide .25s ease;
+    }
+    .conditional-section.visible { display:block; }
+    @keyframes fadeSlide {
+      from { opacity:0; transform:translateY(-8px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    .section-title { font-size:12px; font-weight:700; color:#6366f1; text-transform:uppercase; letter-spacing:.5px; margin-bottom:12px; }
+    .btn-row { display:flex; justify-content:flex-end; margin-top:20px; }
+    .btn { padding:10px 24px; border-radius:8px; border:none; font-size:13px; font-weight:600; cursor:pointer; background:#6366f1; color:#fff; }
+    .divider { border:none; border-top:1px solid #eee; margin:20px 0; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Background Survey</h1>
+  <p class="subtitle">Questions adapt based on your answers — tests conditional branch extraction.</p>
+
+  <!-- Q1: Employment Status -->
+  <div class="field">
+    <label>Are you currently employed? <span style="color:red">*</span></label>
+    <div class="radio-group">
+      <label class="radio-item"><input type="radio" name="employed" value="yes" required onchange="toggleEmployment(this)"/> Yes</label>
+      <label class="radio-item"><input type="radio" name="employed" value="no" onchange="toggleEmployment(this)"/> No</label>
+      <label class="radio-item"><input type="radio" name="employed" value="self" onchange="toggleEmployment(this)"/> Self-employed</label>
+    </div>
+  </div>
+
+  <!-- Conditional: Employed YES -->
+  <div class="conditional-section" id="sec-employed">
+    <div class="section-title">Current Employment Details</div>
+    <div class="field">
+      <label for="employer">Employer Name</label>
+      <input type="text" id="employer" name="employer" placeholder="Example Corp"/>
+    </div>
+    <div class="field">
+      <label for="jobTitle">Job Title</label>
+      <input type="text" id="jobTitle" name="jobTitle" placeholder="Software Engineer"/>
+    </div>
+    <div class="field">
+      <label for="empStart">Employment Start Date</label>
+      <input type="date" id="empStart" name="employmentStart"/>
+    </div>
+    <div class="field">
+      <label for="industry">Industry</label>
+      <select id="industry" name="industry">
+        <option value="">-- Select --</option>
+        <option value="tech">Technology</option>
+        <option value="finance">Finance</option>
+        <option value="health">Healthcare</option>
+        <option value="edu">Education</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Conditional: Unemployed NO -->
+  <div class="conditional-section" id="sec-unemployed">
+    <div class="section-title">Previous Employment</div>
+    <div class="field">
+      <label for="lastEmpDate">Last Employment Date</label>
+      <input type="date" id="lastEmpDate" name="lastEmploymentDate"/>
+    </div>
+    <div class="field">
+      <label for="unemployReason">Reason for Leaving</label>
+      <select id="unemployReason" name="unemploymentReason">
+        <option value="">-- Select --</option>
+        <option value="layoff">Laid off</option>
+        <option value="resigned">Resigned</option>
+        <option value="contract">Contract ended</option>
+        <option value="personal">Personal reasons</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="seekingWork">Actively seeking work?</label>
+      <div class="radio-group">
+        <label class="radio-item"><input type="radio" name="seekingWork" value="yes"/> Yes</label>
+        <label class="radio-item"><input type="radio" name="seekingWork" value="no"/> No</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conditional: Self-employed -->
+  <div class="conditional-section" id="sec-self">
+    <div class="section-title">Self-Employment Details</div>
+    <div class="field">
+      <label for="bizName">Business Name</label>
+      <input type="text" id="bizName" name="businessName" placeholder="My Business LLC"/>
+    </div>
+    <div class="field">
+      <label for="bizType">Business Type</label>
+      <select id="bizType" name="businessType">
+        <option value="">-- Select --</option>
+        <option value="llc">LLC</option>
+        <option value="sole">Sole Proprietor</option>
+        <option value="corp">Corporation</option>
+        <option value="freelance">Freelance</option>
+      </select>
+    </div>
+  </div>
+
+  <hr class="divider"/>
+
+  <!-- Q2: Education conditional -->
+  <div class="field">
+    <label for="hasCollege">Do you have a college degree?</label>
+    <div class="radio-group">
+      <label class="radio-item"><input type="radio" name="hasCollege" value="yes" onchange="toggleCollege(this)"/> Yes</label>
+      <label class="radio-item"><input type="radio" name="hasCollege" value="no" onchange="toggleCollege(this)"/> No</label>
+    </div>
+  </div>
+
+  <div class="conditional-section" id="sec-college">
+    <div class="section-title">College Information</div>
+    <div class="field">
+      <label for="collegeName">Institution Name</label>
+      <input type="text" id="collegeName" name="collegeName" placeholder="State University"/>
+    </div>
+    <div class="field">
+      <label for="degree">Degree</label>
+      <select id="degree" name="degree">
+        <option value="">-- Select --</option>
+        <option value="assoc">Associate</option>
+        <option value="bach">Bachelor's</option>
+        <option value="mast">Master's</option>
+        <option value="phd">PhD</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="gradYear">Graduation Year</label>
+      <input type="number" id="gradYear" name="graduationYear" min="1970" max="2030" placeholder="2020"/>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" type="button" onclick="alert('PracticeMode: Form submitted — blocked in test.')">Submit Survey</button>
+  </div>
+</div>
+
+<script>
+  function toggleEmployment(radio) {
+    document.getElementById('sec-employed').classList.remove('visible');
+    document.getElementById('sec-unemployed').classList.remove('visible');
+    document.getElementById('sec-self').classList.remove('visible');
+    if (radio.value === 'yes') document.getElementById('sec-employed').classList.add('visible');
+    else if (radio.value === 'no') document.getElementById('sec-unemployed').classList.add('visible');
+    else if (radio.value === 'self') document.getElementById('sec-self').classList.add('visible');
+  }
+  function toggleCollege(radio) {
+    if (radio.value === 'yes') document.getElementById('sec-college').classList.add('visible');
+    else document.getElementById('sec-college').classList.remove('visible');
+  }
+</script>
+</body>
+</html>
