@@ -1,7 +1,7 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, Check, ExternalLink, Gavel, Loader2, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ExternalLink, Gavel, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -30,6 +30,62 @@ import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
 import { reviewErrorMessage } from './ReviewQueue.jsx';
 
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES);
+const INLINE_OPTIONS = 5;
+
+// Long choice lists (country codes, states…) collapse to a one-line summary;
+// the full list opens in a scrollable, filterable panel.
+function OptionsSummary({ options, label }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  if (options.length <= INLINE_OPTIONS) return <span>Options: {options.join(', ')}</span>;
+  const needle = query.trim().toLowerCase();
+  const shown = needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options;
+  return (
+    <div className="min-w-0">
+      <p className="line-clamp-1" title={options.slice(0, 20).join(', ')}>
+        <span className="font-medium text-foreground">{options.length} options</span> · {options.slice(0, 3).join(', ')}…
+      </p>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
+        {open ? 'Hide options' : `Show all ${options.length}`}
+        <ChevronDown className={`size-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-2 max-w-xl rounded-md border bg-muted/40 p-2">
+          {options.length > 12 && (
+            <div className="relative mb-2">
+              <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter options" aria-label={`Filter options of ${label}`} className="h-7 pl-7 text-xs" />
+            </div>
+          )}
+          <ul aria-label={`Options of ${label}`} className="flex max-h-48 flex-wrap gap-1 overflow-y-auto pr-1">
+            {shown.map((option) => (
+              <li key={option} className="rounded border bg-card px-1.5 py-0.5 text-xs text-foreground">{option}</li>
+            ))}
+          </ul>
+          {needle && <p className="mt-1.5 text-[11px] text-muted-foreground">{shown.length ? `${shown.length} of ${options.length} match` : 'No options match'}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RuleSummary({ field }) {
+  const { allowedValues, ...rest } = field.validation ?? {};
+  const other = describeRules(rest);
+  // No rules: show nothing rather than a "None" under every plain field.
+  if (!allowedValues) return other === 'None' ? null : other;
+  return (
+    <div className="space-y-1">
+      <OptionsSummary options={allowedValues} label={field.label} />
+      {other !== 'None' && <p>{other}</p>}
+    </div>
+  );
+}
 
 function DetailsEditor({ data, onSave, onCancel }) {
   const [title, setTitle] = useState(data.title);
@@ -333,28 +389,34 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-10">#</TableHead>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Required</TableHead>
-                  <TableHead>Validation</TableHead>
-                  {pending && <TableHead><span className="sr-only">Actions</span></TableHead>}
+                  <TableHead>Question and rules</TableHead>
+                  <TableHead className="w-36">Answer</TableHead>
+                  {pending && <TableHead className="w-px"><span className="sr-only">Actions</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.fields.map((field, index) => (
                   <TableRow key={field.id}>
-                    <TableCell className="tabular-nums text-muted-foreground">{field.position}</TableCell>
-                    <TableCell className="font-medium">{field.label}</TableCell>
-                    <TableCell><Badge variant="outline" className="whitespace-nowrap">{TYPE_LABEL[field.input_type] ?? field.input_type}</Badge></TableCell>
-                    <TableCell>{field.required ? <span className="inline-flex items-center gap-1 text-sm"><Check className="size-3.5 text-success" />Yes</span> : <span className="text-sm text-muted-foreground">No</span>}</TableCell>
-                    <TableCell className="max-w-72 text-[13px] text-muted-foreground">{describeRules(field.validation)}</TableCell>
+                    <TableCell className="align-top tabular-nums text-muted-foreground">{field.position}</TableCell>
+                    <TableCell className="min-w-48 align-top">
+                      <p className="font-medium leading-snug">{field.label}</p>
+                      <div className="mt-1 text-[13px] text-muted-foreground empty:hidden"><RuleSummary field={field} /></div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant="outline" className="whitespace-nowrap">{TYPE_LABEL[field.input_type] ?? field.input_type}</Badge>
+                        {field.required
+                          ? <span className="inline-flex items-center gap-1 text-xs font-medium"><Check className="size-3.5 text-success" />Required</span>
+                          : <span className="text-xs text-muted-foreground">Optional</span>}
+                      </div>
+                    </TableCell>
                     {pending && (
-                      <TableCell className="whitespace-nowrap text-right">
-                        <div className="inline-flex items-center gap-0.5">
-                          <Button variant="ghost" size="icon" className="size-8" disabled={moving || index === 0} onClick={() => move(index, -1)} aria-label={`Move ${field.label} up`}><ArrowUp /></Button>
-                          <Button variant="ghost" size="icon" className="size-8" disabled={moving || index === data.fields.length - 1} onClick={() => move(index, 1)} aria-label={`Move ${field.label} down`}><ArrowDown /></Button>
-                          <Button variant="ghost" size="icon" className="size-8" onClick={() => setFieldEditor({ open: true, field })} aria-label={`Edit ${field.label}`}><Pencil /></Button>
-                          <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive-soft" disabled={data.fields.length === 1} onClick={() => setToDelete(field)} aria-label={`Remove ${field.label}`}><Trash2 /></Button>
+                      <TableCell className="whitespace-nowrap py-2 text-right align-top">
+                        <div className="inline-flex items-center">
+                          <Button variant="ghost" size="icon" className="size-7" disabled={moving || index === 0} onClick={() => move(index, -1)} aria-label={`Move ${field.label} up`}><ArrowUp /></Button>
+                          <Button variant="ghost" size="icon" className="size-7" disabled={moving || index === data.fields.length - 1} onClick={() => move(index, 1)} aria-label={`Move ${field.label} down`}><ArrowDown /></Button>
+                          <Button variant="ghost" size="icon" className="size-7" onClick={() => setFieldEditor({ open: true, field })} aria-label={`Edit ${field.label}`}><Pencil /></Button>
+                          <Button variant="ghost" size="icon" className="size-7 text-destructive hover:bg-destructive-soft" disabled={data.fields.length === 1} onClick={() => setToDelete(field)} aria-label={`Remove ${field.label}`}><Trash2 /></Button>
                         </div>
                       </TableCell>
                     )}

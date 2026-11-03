@@ -114,6 +114,32 @@ describe('ReviewDetail editing', () => {
   });
 });
 
+describe('long choice lists', () => {
+  const countries = Array.from({ length: 245 }, (_, i) => `Country ${String(i + 1).padStart(3, '0')} +${i + 1}`);
+  const withCountries = { ...form, fields: [...form.fields, { id: 'c', position: 3, label: 'Country', input_type: 'select', required: true, validation: { allowedValues: countries } }] };
+
+  it('collapses to a summary and opens a filterable list', async () => {
+    render(<ReviewDetail formId="f1" onBack={() => {}} api={{ getReviewForm: vi.fn().mockResolvedValue(withCountries) }} />);
+    expect(await screen.findByText('245 options')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Options of Country' })).not.toBeInTheDocument();
+    // Short lists stay inline.
+    expect(screen.getByText('Options: High School, PhD')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 245' }));
+    const list = screen.getByRole('list', { name: 'Options of Country' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(245);
+
+    fireEvent.change(screen.getByLabelText('Filter options of Country'), { target: { value: '+24' } });
+    expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(
+      countries.filter((c) => c.includes('+24')),
+    );
+    expect(screen.getByText(`${countries.filter((c) => c.includes('+24')).length} of 245 match`)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide options' }));
+    expect(screen.queryByRole('list', { name: 'Options of Country' })).not.toBeInTheDocument();
+  });
+});
+
 describe('buildFieldPayload', () => {
   const draft = (over) => ({ label: 'Q', inputType: 'text', required: false, options: '', minLength: '', maxLength: '', min: '', max: '', ...over });
   it('keeps only the rules that fit the type', () => {
