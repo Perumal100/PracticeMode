@@ -90,6 +90,12 @@ class FormExtractionView(APIView):
         serializer = ExtractionRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payload = serializer.validated_data
+        # API-15: one pending copy per source, so a form is not reviewed twice.
+        if PracticeForm.objects.filter(source_url=payload["source_url"], status=FormStatus.AWAITING_REVIEW).exists():
+            return Response({
+                "error": "DUPLICATE_PENDING_IMPORT",
+                "message": "A form from this source is already awaiting review.",
+            }, status=status.HTTP_409_CONFLICT)
         with transaction.atomic():
             practice_form = PracticeForm.objects.create(
                 title=payload["title"],

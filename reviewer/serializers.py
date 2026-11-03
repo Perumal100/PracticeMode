@@ -1,3 +1,5 @@
+import math
+
 from rest_framework import serializers
 
 from .models import FormField, FormStatus, PracticeForm, ReviewDecision, ReviewNotification
@@ -50,12 +52,63 @@ class DecisionRequestSerializer(serializers.Serializer):
         return attrs
 
 
+# Validation rules each input type may carry: the ones the attempt module
+# (attempts/validation.py) can check. Any other rule would let a reviewer
+# approve a form that learners can never start (422 UNSUPPORTED_FORM_SCHEMA).
+LENGTH_RULES = {"minLength", "maxLength"}
+SUPPORTED_RULES = {
+    "text": LENGTH_RULES, "email": LENGTH_RULES, "tel": LENGTH_RULES, "textarea": LENGTH_RULES,
+    "select": LENGTH_RULES | {"allowedValues"}, "number": {"min", "max"}, "date": set(), "checkbox": set(),
+}
+
+
+def _finite_number(value):
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
+
+
 class ExtractionFieldSerializer(serializers.Serializer):
     position = serializers.IntegerField(min_value=0)
     label = serializers.CharField(max_length=300, trim_whitespace=True)
     input_type = serializers.ChoiceField(choices=[choice[0] for choice in FormField.INPUT_TYPES])
     required = serializers.BooleanField(default=False)
     validation = serializers.JSONField(required=False, default=dict)
+
+    def validate(self, attrs):
+        rules = attrs.get("validation")
+        if not isinstance(rules, dict):
+            raise serializers.ValidationError({"validation": "Validation rules must be an object."})
+        input_type = attrs["input_type"]
+        problems = []
+        for name, value in rules.items():
+            if name == "required":
+                ok = value is attrs["required"]
+            elif name not in SUPPORTED_RULES[input_type]:
+                ok = False
+            elif name in LENGTH_RULES:
+                ok = type(value) is int and value >= 0
+            elif name in {"min", "max"}:
+                ok = _finite_number(value) is not None
+            else:  # allowedValues
+                ok = (isinstance(value, list) and bool(value) and len(set(map(str, value))) == len(value)
+                      and all(isinstance(item, str) and item.strip() for item in value))
+            if not ok:
+                problems.append(f"{name} is not a supported rule for a {input_type} field.")
+        if input_type == "select" and "allowedValues" not in rules:
+            problems.append("A select field needs its options in allowedValues.")
+        if type(rules.get("minLength")) is int and type(rules.get("maxLength")) is int and rules["minLength"] > rules["maxLength"]:
+            problems.append("minLength exceeds maxLength.")
+        low, high = _finite_number(rules.get("min")), _finite_number(rules.get("max"))
+        if low is not None and high is not None and low > high:
+            problems.append("min exceeds max.")
+        if problems:
+            raise serializers.ValidationError({"validation": problems})
+        return attrs
 
 
 class ExtractionRequestSerializer(serializers.Serializer):
