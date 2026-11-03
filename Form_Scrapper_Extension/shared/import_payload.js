@@ -170,6 +170,7 @@
     }
     if (status === 403) return 'Your PracticeMode account is not a Form Reviewer, so it cannot import forms.';
     if (status === 400) return `PracticeMode rejected the import: ${detail || 'the form structure is invalid.'}`;
+    if (status === 409) return 'This form is already in the PracticeMode review queue. Review that copy before sending it again.';
     return `PracticeMode could not store the import (HTTP ${status}${detail ? `: ${detail}` : ''}).`;
   }
 

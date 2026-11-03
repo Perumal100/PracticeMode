@@ -108,6 +108,7 @@ test('import errors tell the reviewer what to do next', () => {
     /Add chrome-extension:\/\/abc to DJANGO_CSRF_TRUSTED_ORIGINS/);
   assert.match(describeImportError(403, { detail: 'Form Reviewer permission is required.' }, ctx), /not a Form Reviewer/);
   assert.match(describeImportError(400, { source_url: ['Enter a valid URL.'] }, ctx), /rejected the import: source_url: Enter a valid URL\./);
+  assert.match(describeImportError(409, { error: 'DUPLICATE_PENDING_IMPORT' }, ctx), /already in the PracticeMode review queue/);
   assert.match(describeImportError(503, null, ctx), /HTTP 503/);
 });
 

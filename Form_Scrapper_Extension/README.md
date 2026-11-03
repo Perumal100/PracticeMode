@@ -131,7 +131,7 @@ What is sent: `{ title, source_url, source_available: true, fields: [{ position,
 
 Rules the backend cannot check yet (`pattern`, `step`, date ranges) are left out and reported. Otherwise an approved form would fail with `422 UNSUPPORTED_FORM_SCHEMA` when a learner starts it. The reviewer compares the imported form with the source page before approving it (US-10).
 
-Errors are explained in the copilot: an unreachable server, `401` (sign in as a Form Reviewer), `403` CSRF (add the extension origin to `DJANGO_CSRF_TRUSTED_ORIGINS`), `403` wrong role, and `400` with the backend's validation message.
+Errors are explained in the copilot: an unreachable server, `401` (sign in as a Form Reviewer), `403` CSRF (add the extension origin to `DJANGO_CSRF_TRUSTED_ORIGINS`), `403` wrong role, `400` with the backend's validation message, and `409` when the same source is already awaiting review.
 
 ## Tests
 
@@ -169,4 +169,4 @@ DUMP=1 node tests/tools/extract.mjs test13_multipage_page1.html          # full 
 - **Branches that change later steps** (an answer on step 1 changing step 3) are only recorded along the path actually taken; `navigation[].choicesMade` shows which answers led there.
 - **Validation that only happens after final submission** cannot be discovered, because the extension never submits.
 - **Calendar widgets that ignore typed input** and **drag-and-drop upload zones without a file input** need manual input (the extension pauses and asks).
-- **Import (API-15)** sends only what the backend can practise today (see the table above). Hints from help text, file fields, conditional logic and `pattern` rules stay in the JSON download only. The backend does not yet reject a second import of the same source URL (design: `409`), so avoid sending the same capture twice.
+- **Import (API-15)** sends only what the backend can practise today (see the table above). Hints from help text, file fields, conditional logic and `pattern` rules stay in the JSON download only.
