@@ -23,6 +23,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 - [Testing](#testing)
 - [Departures from the Sprint 2 design](#departures-from-the-sprint-2-design)
 - [Team](#team)
+- [Pull requests and reviews](#pull-requests-and-reviews)
 - [Reference: API, validation rules, data model, configuration](#reference)
 - [More documentation](#more-documentation)
 
@@ -211,6 +212,19 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 | Atheer Alajmi | Form categories and failure reason, pending-form metadata editing, `seed_demo` demo data |
 | Perumal Marimuthu | Reviewer workflow API: queue, notifications, decisions and import (US-04, US-10, US-16, US-17, US-25) |
 | Siddharth Jiyani | Browser extension and import (US-25), web app screens and UI, learner sign-in, reviewer corrections, integration |
+
+## Pull requests and reviews
+
+Every branch reached `main` through a pull request that a teammate reviewed. Listed in merge order.
+
+| PR | Stories | Branch | Author | Reviewer |
+| --- | --- | --- | --- | --- |
+| [#2](https://github.com/Perumal100/PracticeMode/pull/2) Form Reviewer workflow API | US-04, US-16, US-17 | `pr/reviewer-workflow` | Perumal Marimuthu | Atheer Alajmi |
+| [#3](https://github.com/Perumal100/PracticeMode/pull/3) Form metadata validation, protected editing, demo data | US-10 (supporting) | `Dev-Atheer` | Atheer Alajmi | Siddharth Jiyani |
+| [#7](https://github.com/Perumal100/PracticeMode/pull/7) React frontend with autosave, learner and reviewer screens | US-08 | `kashvi_branch` | Kashvi Prawal | Rohan Aditya Ram |
+| [#6](https://github.com/Perumal100/PracticeMode/pull/6) Accounts, learner catalog and practice attempts | US-01, US-02, US-11, US-26 | `dev-rohan` | Rohan Aditya Ram | Siddharth Jiyani |
+| [#8](https://github.com/Perumal100/PracticeMode/pull/8) Browser extension that extracts forms and sends them for review | US-25 | `browser-extension` | Siddharth Jiyani | Perumal Marimuthu |
+| [#5](https://github.com/Perumal100/PracticeMode/pull/5) Post-integration: reviewer corrections, link and phone checks, practice insights | US-10, US-26 | `pr/post-integration` | Siddharth Jiyani | Kashvi Prawal |
 
 ## Reference
 
