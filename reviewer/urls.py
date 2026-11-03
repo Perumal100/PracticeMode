@@ -9,6 +9,7 @@ from .views import (
     ReviewFormDetailView,
     ReviewFormListView,
     ReviewNotificationListView,
+    ReviewPreviewCheckView,
 )
 
 urlpatterns = [
@@ -18,6 +19,7 @@ urlpatterns = [
     path("review/forms/<uuid:form_id>/fields", ReviewFieldListView.as_view(), name="review-field-list"),
     path("review/forms/<uuid:form_id>/fields/order", ReviewFieldOrderView.as_view(), name="review-field-order"),
     path("review/forms/<uuid:form_id>/fields/<uuid:field_id>", ReviewFieldDetailView.as_view(), name="review-field-detail"),
+    path("review/forms/<uuid:form_id>/preview-check", ReviewPreviewCheckView.as_view(), name="review-preview-check"),
     path("review/notifications", ReviewNotificationListView.as_view(), name="review-notifications"),
     path("forms/extractions", FormExtractionView.as_view(), name="form-extraction"),
 ]

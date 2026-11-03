@@ -5,6 +5,8 @@ from rest_framework.exceptions import APIException, NotFound, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from attempts.validation import validation_feedback
+
 from .models import FormField, FormStatus, PracticeForm, ReviewDecision, ReviewNotification
 from .permissions import IsFormReviewer
 from .serializers import (
@@ -252,3 +254,25 @@ class ReviewFieldOrderView(APIView):
             _renumber(practice_form, ordered_ids)
             practice_form.save(update_fields=["updated_at"])
         return _form_response(form_id)
+
+
+class ReviewPreviewCheckView(APIView):
+    """Check sample answers the way a learner's submission is checked, so a
+    reviewer can try the form before deciding. Nothing is saved."""
+
+    permission_classes = [IsFormReviewer]
+
+    def post(self, request, form_id):
+        try:
+            practice_form = PracticeForm.objects.prefetch_related("fields").get(id=form_id)
+        except PracticeForm.DoesNotExist:
+            raise NotFound({"error": "FORM_NOT_FOUND"}) from None
+        answers = request.data.get("answers") if isinstance(request.data, dict) else None
+        if not isinstance(answers, dict) or set(request.data) != {"answers"}:
+            raise ValidationError({"error": "INVALID_ANSWERS", "message": 'Send {"answers": {fieldId: value}}.'})
+        fields = list(practice_form.fields.all())
+        by_id = {str(field.pk): field for field in fields}
+        if not set(answers) <= set(by_id):
+            raise ValidationError({"error": "FIELD_NOT_FOUND", "message": "Every answer must belong to a field of this form."})
+        values = {by_id[field_id].pk: value for field_id, value in answers.items()}
+        return Response({"validationFeedback": validation_feedback(fields, values)})

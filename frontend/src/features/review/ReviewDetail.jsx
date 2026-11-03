@@ -1,7 +1,7 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Gavel, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Eye, Gavel, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -27,6 +27,7 @@ import {
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
 import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
+import FormPreview from './FormPreview.jsx';
 import { reviewErrorMessage } from './ReviewQueue.jsx';
 
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES);
@@ -214,6 +215,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
   const [editingDetails, setEditingDetails] = useState(false);
   const [fieldEditor, setFieldEditor] = useState({ open: false, field: null });
   const [toDelete, setToDelete] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
   const [moving, setMoving] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState(null);
@@ -335,8 +337,13 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
         breadcrumb={[...crumbs, { label: data.title }]}
         meta={<StatusBadge status={data.status} />}
         description={`${data.fields.length} fields · ${required} required · imported ${timeAgo(data.created_at)}`}
-        actions={data.status === 'APPROVED' && onInsights && (
-          <Button variant="outline" onClick={() => onInsights(data.id)}><BarChart3 />Practice insights</Button>
+        actions={(
+          <>
+            <Button variant="outline" onClick={() => setPreviewing(true)}><Eye />Preview form</Button>
+            {data.status === 'APPROVED' && onInsights && (
+              <Button variant="outline" onClick={() => onInsights(data.id)}><BarChart3 />Practice insights</Button>
+            )}
+          </>
         )}
       />
 
@@ -491,6 +498,8 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
           </Card>
         </div>
       </div>
+
+      <FormPreview form={data} open={previewing} onOpenChange={setPreviewing} check={api.checkPreviewAnswers} />
 
       <FieldEditor open={fieldEditor.open} field={fieldEditor.field} onOpenChange={(open) => setFieldEditor((f) => ({ ...f, open }))} onSave={saveField} />
 

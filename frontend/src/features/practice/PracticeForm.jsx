@@ -11,13 +11,11 @@ import {
 import { StatusBadge } from '@/components/ui/badge.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card.jsx';
-import { Label } from '@/components/ui/input.jsx';
 import { Progress } from '@/components/ui/progress.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
-import { cn } from '@/lib/utils';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
-import FieldInput from './FieldInput.jsx';
+import Question, { messagesByField } from './Question.jsx';
 import { completeAttempt as defaultCompleteAttempt, startAttempt as defaultStartAttempt } from './practiceApi.js';
 import { rememberAttempt, storedAttempt } from './attemptStore.js';
 
@@ -196,11 +194,7 @@ function AttemptView({ attemptId, form, api, onCompleted, onRestart }) {
     });
   }, [submit.requested, statuses, attemptId, completeAttempt, onCompleted]);
 
-  const feedbackByField = useMemo(() => {
-    const map = {};
-    for (const item of result?.validationFeedback ?? []) (map[item.fieldId] ??= []).push(item.errorMessage);
-    return map;
-  }, [result]);
+  const feedbackByField = useMemo(() => messagesByField(result?.validationFeedback), [result]);
 
   if (resume.status === 'loading') return <Skeleton className="h-96 rounded-lg" />;
   if (resume.status === 'error') {
@@ -269,38 +263,20 @@ function AttemptView({ attemptId, form, api, onCompleted, onRestart }) {
             <span className="text-xs text-muted-foreground"><span className="text-destructive">*</span> required</span>
           </CardHeader>
           <div className="divide-y">
-            {form.fields.map((field, index) => {
-              const messages = feedbackByField[field.id] ?? [];
-              const feedbackId = messages.length ? `feedback-${field.id}` : undefined;
-              const isCheckbox = field.input_type === 'checkbox';
-              return (
-                <div key={field.id} className={cn('px-5 py-4', messages.length && 'bg-destructive-soft/40')}>
-                  <div className="flex gap-2">
-                    <span aria-hidden className="w-5 shrink-0 pt-px text-xs leading-5 tabular-nums text-muted-foreground">{index + 1}.</span>
-                    <div className={cn('flex min-w-0 flex-1 gap-2.5', isCheckbox ? 'items-start' : 'flex-col')}>
-                      {isCheckbox && (
-                        <FieldInput field={field} value={values[field.id] ?? null} disabled={completed} invalid={messages.length > 0} describedBy={feedbackId} onChange={(v) => change(field.id, v)} onBlur={() => flush(field.id)} />
-                      )}
-                      <Label htmlFor={`field-${field.id}`} className={cn('leading-5', isCheckbox && 'cursor-pointer')}>
-                        {field.label}
-                        {field.required && <span className="text-destructive"> *<span className="sr-only"> (required)</span></span>}
-                      </Label>
-                      {!isCheckbox && (
-                        <FieldInput field={field} value={values[field.id] ?? null} disabled={completed} invalid={messages.length > 0} describedBy={feedbackId} onChange={(v) => change(field.id, v)} onBlur={() => flush(field.id)} />
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1 pl-7 empty:hidden [&>*:first-child]:mt-2">
-                    <AutosaveStatus status={statuses[field.id]} onRetry={() => retry(field.id)} />
-                    {messages.length > 0 && (
-                      <ul id={feedbackId} className="space-y-0.5 text-[13px] font-medium text-destructive">
-                        {messages.map((m) => <li key={m} className="flex items-center gap-1.5"><AlertCircle className="size-3.5" />{m}</li>)}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {form.fields.map((field, index) => (
+              <Question
+                key={field.id}
+                field={field}
+                number={index + 1}
+                value={values[field.id]}
+                disabled={completed}
+                messages={feedbackByField[field.id]}
+                onChange={(v) => change(field.id, v)}
+                onBlur={() => flush(field.id)}
+              >
+                <AutosaveStatus status={statuses[field.id]} onRetry={() => retry(field.id)} />
+              </Question>
+            ))}
           </div>
         </Card>
       </div>

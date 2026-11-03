@@ -38,3 +38,8 @@ export function deleteField(formId, fieldId) {
 export function reorderFields(formId, fieldIds) {
   return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/fields/order`, { method: 'PUT', body: { fieldIds } });
 }
+
+// Sample answers checked like a learner's submission; nothing is saved.
+export function checkPreviewAnswers(formId, answers) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/preview-check`, { method: 'POST', body: { answers } });
+}

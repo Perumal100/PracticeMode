@@ -69,6 +69,32 @@ describe('ReviewDetail', () => {
     expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
   });
 
+  it('the reviewer previews the form as learners see it and checks sample answers without saving', async () => {
+    const checkPreviewAnswers = vi.fn()
+      .mockResolvedValueOnce({ validationFeedback: [
+        { fieldId: 'a', ruleType: 'LENGTH', errorMessage: 'Use at least 2 characters.' },
+        { fieldId: 'b', ruleType: 'REQUIRED', errorMessage: 'This field is required.' },
+      ] })
+      .mockResolvedValueOnce({ validationFeedback: [] });
+    const api = setup({ checkPreviewAnswers, updateField: vi.fn() });
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview form' }));
+    const dialog = await screen.findByRole('dialog', { name: /Preview: Job Application Form/ });
+    fireEvent.change(within(dialog).getByLabelText(/First Name/), { target: { value: 'A' } });
+    expect(within(dialog).getByRole('option', { name: 'PhD' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Check answers' }));
+    await waitFor(() => expect(checkPreviewAnswers).toHaveBeenCalledWith('f1', { a: 'A' }));
+    expect(await within(dialog).findByText('2 answers need attention. A learner would see the same messages.')).toBeInTheDocument();
+    expect(within(dialog).getByText('Use at least 2 characters.')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/First Name/)).toHaveAttribute('aria-invalid', 'true');
+
+    fireEvent.change(within(dialog).getByLabelText(/First Name/), { target: { value: 'Alex' } });
+    fireEvent.change(within(dialog).getByLabelText(/Highest Education/), { target: { value: 'PhD' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Check answers' }));
+    expect(await within(dialog).findByText('No problems found. These answers would pass.')).toBeInTheDocument();
+    expect(checkPreviewAnswers).toHaveBeenLastCalledWith('f1', { a: 'Alex', b: 'PhD' });
+    expect(api.updateField).not.toHaveBeenCalled();
+  });
+
   it('an approved form links to its practice insights; a pending one does not', async () => {
     const onInsights = vi.fn();
     const approved = { ...pending, status: 'APPROVED', decision: { outcome: 'APPROVED', reviewer: 'reviewer', rejection_reason: '', decided_at: '2026-11-03T10:00:00Z' } };

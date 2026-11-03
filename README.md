@@ -11,7 +11,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 3 goal** | A Form Reviewer can import a real web form with the browser extension, verify and correct it, and publish it. A learner can then find that form, practise it with autosave, and get feedback on their answers. |
 | **Status** | 10 of 16 MVP user stories implemented; the other 6 stay in the product backlog for Sprint 4. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 142 backend · 85 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
+| **Tests** | 145 backend · 86 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -75,6 +75,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - source link, with a warning when the source was unreachable
   - each field's label, answer type, required flag and rules
   - long choice lists collapse to a summary, with a filterable "Show all"
+- **Preview:** try the form exactly as learners will see it, and check sample answers with the same rules learners get. Nothing is saved.
 - **Corrections before deciding:** edit the title and source page; add, edit, reorder and remove fields; set categories. Every change is re-checked with the import rules.
 - **Decision:** approve, or reject with a reason, after a confirmation. Decisions are recorded and cannot be repeated.
 - **Practice insights** (counts only, never who or what was typed):
@@ -170,7 +171,7 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 
 1. **US-25:** the extension extracts `test01_three_step_form.html` and sends it. Sending `test09_file_upload.html` shows which fields were left out, and sending the same form twice is refused.
 2. **US-16, US-04:** the reviewer signs in, sees the new import in "New imports", and opens it.
-3. **US-10:** the reviewer opens the source, compares the fields, corrects a field and the title, and adds categories.
+3. **US-10:** the reviewer opens the source, compares the fields, corrects a field and the title, and adds categories. **Preview form** shows the result as learners will see it; typing `sfnifj` into a link field and pressing **Check answers** shows the same error a learner would get.
 4. **US-17:** the reviewer approves the form, then rejects a demo form (first without a reason, which is refused, then with one).
 5. **US-01:** in a private window, a learner signs in with only a display name. Opening `#/review` sends them back to their catalog.
 6. **US-02:** the learner filters by category and keyword; a search with no matches shows a message.
@@ -181,8 +182,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 142 backend tests
-(cd frontend && npm test)                           # 85 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 145 backend tests
+(cd frontend && npm test)                           # 86 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 26 end-to-end
 ```
 
@@ -292,6 +293,7 @@ Completion accepts no body. Policy A follows DD-05/API-16: the first successful 
 | `PATCH` | `/api/review/forms/{formId}/fields/{fieldId}` | Correct a field's label, type, required flag or validation |
 | `DELETE` | `/api/review/forms/{formId}/fields/{fieldId}` | Remove a field the source does not have (at least one must remain) |
 | `PUT` | `/api/review/forms/{formId}/fields/order` | `{"fieldIds": [...]}` puts the fields in the source's order |
+| `POST` | `/api/review/forms/{formId}/preview-check` | `{"answers": {fieldId: value}}` returns the `validationFeedback` a learner would get; nothing is saved |
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
 | `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
 | `POST` | `/api/forms/extractions` | Import an extracted form for review (used by the browser extension) |
