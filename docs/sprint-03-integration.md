@@ -1,6 +1,6 @@
 # Sprint 3 Integration Guide
 
-How to combine the Sprint 3 branches into one working build. Each branch has been checked against the others, and the combined result was tested end to end: 112 backend tests, 32 frontend tests, 25 extension end-to-end tests, and a full-stack walkthrough.
+How to combine the Sprint 3 branches into one working build. Each branch has been checked against the others, and the combined result was tested end to end: 116 backend tests, 64 frontend tests, 25 extension unit and 25 end-to-end tests, and a full-stack walkthrough through the web app.
 
 ## Branches
 
@@ -8,7 +8,7 @@ How to combine the Sprint 3 branches into one working build. Each branch has bee
 | --- | --- | --- | --- | --- |
 | `develop-perumal` | Perumal | Django project, `reviewer` app: review queue, decisions, notifications, API-15 import | US-04, US-10, US-16, US-17, US-25 (server) | root `08c575f` |
 | `Dev-Atheer` | Atheer | Form categories and failure reason (`reviewer.0002`), pending-form metadata edit (`PATCH /api/review/forms/{id}`), `seed_demo` | US-02 data, US-15 data | based on `develop-perumal` |
-| `kashvi_branch` | Kashvi | `frontend/`: React + Vite shell, API client, US-08 autosave hooks and status component | US-08 (client) | based on `develop-perumal` |
+| `kashvi_branch` | Kashvi (screens added by Siddharth) | `frontend/`: API client, US-08 autosave hooks, and the sign-in, catalog, practice and review screens | US-01, US-02, US-04, US-08, US-10, US-11, US-16, US-17, US-26 (client) | based on `develop-perumal` |
 | `dev-rohan` | Rohan | `accounts` (staff and learner sign-in), `catalog` (learner search), `attempts` (create, resume, autosave, complete) | US-01, US-02, US-08 (server), US-11 (server), US-26 | root `caa0388` (`main`) |
 | `browser-extension` | Siddharth | `Form_Scrapper_Extension/`: multi-step extraction and sending to API-15 | US-25 (client) | root `caa0388` (`main`) |
 
@@ -39,8 +39,8 @@ After merging, check:
 ```bash
 python manage.py check
 python manage.py makemigrations --check --dry-run   # expect "No changes detected"
-python manage.py test                               # 112 tests
-(cd frontend && npm install && npm test)            # 32 tests
+python manage.py test                               # 116 tests
+(cd frontend && npm install && npm test)            # 64 tests
 (cd Form_Scrapper_Extension && npm install && npm run setup:browsers && npm test)   # 25 unit + 25 e2e
 ```
 
@@ -73,8 +73,8 @@ These were checked against the running code. Field names in request and response
 | --- | --- | --- | --- |
 | Roles | `accounts.identity`, `reviewer.permissions` | every protected view | Django groups `LEARNER`, `INSTRUCTOR`, `FORM_REVIEWER` on the default user model. |
 | Sign-in (API-01) | `accounts` | frontend, extension, reviewers | `GET /api/session` sets `csrftoken`. `POST /api/login` with `{username, password}` or `{role: "LEARNER", displayName}` returns `{user: {id, displayName, role}}`. |
-| Import (API-15) | extension `shared/import_payload.js` | `reviewer.FormExtractionView` | `{title, source_url, source_available, fields: [{position, label, input_type, required, validation}]}`. `input_type` is one of `text email tel number date select checkbox textarea`. |
-| Validation rules | `reviewer.FormField.validation` | `attempts.validation.check_schema` | `minLength`/`maxLength` on text-like fields, `min`/`max` on numbers, `allowedValues` (required) on selects. Any other key makes a learner attempt return `422 UNSUPPORTED_FORM_SCHEMA`. |
+| Import (API-15) | extension `shared/import_payload.js` | `reviewer.FormExtractionView` | `{title, source_url, source_available, fields: [{position, label, input_type, required, validation}]}`. `input_type` is one of `text email tel number date select checkbox textarea`. A second import of a source that is still awaiting review returns `409 DUPLICATE_PENDING_IMPORT`. |
+| Validation rules | `reviewer.FormField.validation` | `attempts.validation.check_schema` | `minLength`/`maxLength` on text-like fields, `min`/`max` on numbers, `allowedValues` (required) on selects. The import endpoint rejects any other rule with `400`, so every approved form can be practised. |
 | Categories | `reviewer.PracticeForm.categories` (Dev-Atheer) | `catalog` | JSON list of labels. `GET /api/forms?category=A&category=B` matches any selected category, ignoring case. |
 | Attempt read (API-05) | `attempts` | `frontend/src/features/autosave` | `{id, formId, status, startedAt, lastSavedAt, completedAt, validationFeedback, answers: [{fieldId, value, savedAt}]}` |
 | Answer save (API-06) | `attempts` | autosave | `PATCH /api/attempts/{id}/answers/{fieldId}` with `{value}` returns `{fieldId, value, savedAt}`. Errors: `400`, `401`, `403`, `404`, `409 ATTEMPT_COMPLETED`, `422`, `503 SAVE_FAILED`. |
@@ -92,9 +92,8 @@ These were checked against the running code. Field names in request and response
 
 - **US-03, US-05, US-22**: assistance requests and instructor progress (API-11 to API-14, API-17). No models or endpoints exist yet. `ProgressCounter` exists in `attempts`.
 - **US-09, US-12, US-18**: translations, hints and checklists. No `Hint`, `Translation` or `ChecklistItem` models exist, and API-03 does not return guidance. `hint_view_count` is never incremented.
-- **Frontend screens**: there is no sign-in, catalog, practice-form (US-11) or reviewer page yet. The autosave hooks are ready to use in the practice form.
-- **API-15 gaps from the design**: no `409` for a second import of the same `source_url` while the first is awaiting review, and no `422` result that records a `FAILED` form with `failure_reason`.
-- **Import-time rule check**: after integration, `FormExtractionView` can call `attempts.validation.check_schema` on the new fields, so a non-extension client cannot import a form that learners can never start. The extension already sends only supported rules.
+- **Instructor screens**: an instructor who signs in sees a placeholder until US-03, US-05 and US-22 are built.
+- **API-15 `422` path**: an extraction failure is not yet recorded as a `FAILED` form with `failure_reason`. The extension reports such failures itself and sends nothing.
 - **US-10 AC-03**: `source_available` is a boolean set by the importer. Nothing re-checks the source, and the design's three-state `sourceAvailability` is not implemented.
 - **Files**: `UploadedFile` and the PDF/DOCX byte check are not implemented. File fields are left out of imports.
 - **Role edge case**: `reviewer.permissions` treats a superuser as a Form Reviewer, but `accounts` sign-in requires a role group. Give demo accounts a group.
