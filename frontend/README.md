@@ -29,6 +29,8 @@ The screens need the integrated backend: `reviewer` (develop-perumal and Dev-Ath
 | `#/forms/<id>`: practice workspace | Learner | US-11, US-08, US-26 | `GET /api/forms/<id>`, `POST /api/attempts`, `GET`/`PATCH` attempt answers, `POST .../completion` |
 | `#/review`: reviewer dashboard | Form Reviewer | US-04, US-16 | `GET /api/review/forms?status=` (all three lists), `GET /api/review/notifications` |
 | `#/review/<id>`: form inspection | Form Reviewer | US-04, US-10, US-17 | `GET`/`PATCH /api/review/forms/<id>`, `POST .../decision` |
+| `#/insights`: practice insights | Form Reviewer | (supports US-10, US-17) | `GET /api/review/analytics?days=` |
+| `#/insights/<id>`: one form's insights | Form Reviewer | (supports US-10, US-17) | `GET /api/review/analytics/forms/<id>` |
 | `#/instructor` | Instructor | n/a | Placeholder until US-03, US-05 and US-22 |
 
 - Learners sign in with a display name only. Staff use a username and password and land on the workspace for their role.
@@ -36,6 +38,7 @@ The screens need the integrated backend: `reviewer` (develop-perumal and Dev-Ath
 - **Practice workspace:** numbered questions, a "Saved ✓" status under each answer (`src/features/autosave`), and a side panel with progress on required questions and an overall save status. Submitting with required questions unanswered asks first. After completion, a summary links each issue to its field, and the answers lock.
 - **Reviewer dashboard:** counts by status, a "New imports" panel, and a queue table with status tabs.
 - **Form inspection:** the source link with a warning when the source was unreachable, the extracted fields table, a category editor, and approve or reject with confirmation and a required rejection reason.
+- **Practice insights:** counts only. Totals, a chart of attempts per day (7, 14 or 30 days; hover or focus a day for its numbers), a per-form table, and for each form the questions learners miss most, by rule. No learner names or answers are requested or shown.
 - The open attempt for each form is remembered in `localStorage` per learner, so reopening the form resumes it. A new sign-in is a new learner, so earlier attempts are not resumed (Sprint 2, DD-05).
 - The server enforces every permission. The client only routes each role to its own screens.
 
@@ -45,11 +48,12 @@ The screens need the integrated backend: `reviewer` (develop-perumal and Dev-Ath
 src/index.css             Tailwind entry and design tokens
 src/components/ui/        shadcn/ui-style primitives
 src/components/           app shell, page header, stat card, empty state, brand
-src/api/                  client.js (fetch, CSRF), session.js, catalog.js, review.js
+src/api/                  client.js (fetch, CSRF), session.js, catalog.js, review.js, analytics.js
 src/features/auth         SignIn
 src/features/catalog      Catalog (learner home)
 src/features/practice     PracticeForm, FieldInput, practiceApi, attemptStore
 src/features/autosave     US-08 hooks and status (Kashvi)
-src/features/review       ReviewQueue (dashboard), ReviewDetail
+src/features/review       ReviewQueue (dashboard), ReviewDetail, FieldEditor
+src/features/analytics    Insights, FormInsights, ActivityChart
 src/lib/                  useHashRoute, utils (cn), format
 ```

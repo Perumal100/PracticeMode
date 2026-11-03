@@ -11,7 +11,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 3 goal** | A Form Reviewer can import a real web form with the browser extension, verify and correct it, and publish it. A learner can then find that form, practise it with autosave, and get feedback on their answers. |
 | **Status** | 10 of 16 MVP user stories implemented; the other 6 stay in the product backlog for Sprint 4. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 135 backend · 78 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
+| **Tests** | 142 backend · 85 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -76,6 +76,11 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - long choice lists collapse to a summary, with a filterable "Show all"
 - **Corrections before deciding:** edit the title and source page; add, edit, reorder and remove fields; set categories. Every change is re-checked with the import rules.
 - **Decision:** approve, or reject with a reason, after a confirmation. Decisions are recorded and cannot be repeated.
+- **Practice insights** (counts only, never who or what was typed):
+  - learners who practised, attempts started and submitted, and submissions with no feedback
+  - attempts per day over the last 7, 14 or 30 days
+  - a per-form table, and for each form, the questions learners get wrong most often and which rule they broke, plus the median time to submit
+  - an approved form's review page links straight to its insights
 
 ### Browser extension (form extractor)
 - Walks multi-step forms with fictional sample data and **never submits**. It stops before final "Submit", "Pay" or "Create account" buttons.
@@ -101,7 +106,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 | --- | --- | --- |
 | `accounts/` | Staff and learner sign-in, sessions, role checks | US-01 |
 | `catalog/` | Learner search of approved forms | US-02 |
-| `attempts/` | Practice attempts, autosaved answers, completion feedback, progress counters | US-08, US-11, US-26 |
+| `attempts/` | Practice attempts, autosaved answers, completion feedback, progress counters, reviewer analytics, `seed_demo_activity` | US-08, US-11, US-26 |
 | `reviewer/` | Import endpoint, review queue, notifications, decisions, corrections, `seed_demo` | US-04, US-10, US-16, US-17, US-25 |
 | `practicemode/` | Django settings, URL routing, `.env` loader | |
 | `frontend/` | React web app ([frontend/README.md](frontend/README.md)) | all screens |
@@ -133,6 +138,8 @@ for name, role in [('reviewer', 'FORM_REVIEWER'), ('instructor', 'INSTRUCTOR')]:
 "
 .venv/bin/python manage.py runserver
 ```
+
+Once a form is approved, `.venv/bin/python manage.py seed_demo_activity` adds two weeks of fictional practice by 24 "Demo learner" accounts, so Practice insights has numbers to show. `seed_demo_activity --clear` removes exactly that data and nothing else.
 
 ### 2. Web app (http://localhost:5173)
 
@@ -168,12 +175,13 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 6. **US-02:** the learner filters by category and keyword; a search with no matches shows a message.
 7. **US-11, US-08:** the learner starts the form, types answers ("Saved ✓"), reloads the page, and the answers come back.
 8. **US-26:** the learner submits with a bad email and a missing required answer. Feedback appears under those fields, and the answers lock.
+9. **Practice insights:** back as the reviewer, open **Practice insights**. The learner's attempt is counted without their name. Open the form to see which questions were missed. Run `seed_demo_activity` beforehand for a fuller chart.
 
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 135 backend tests
-(cd frontend && npm test)                           # 78 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 142 backend tests
+(cd frontend && npm test)                           # 85 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 26 end-to-end
 ```
 
@@ -273,6 +281,8 @@ Completion accepts no body. Policy A follows DD-05/API-16: the first successful 
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
 | `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
 | `POST` | `/api/forms/extractions` | Import an extracted form for review (used by the browser extension) |
+| `GET` | `/api/review/analytics?days=14` | Practice totals, attempts per day (`days` is 7, 14 or 30) and per-form counts |
+| `GET` | `/api/review/analytics/forms/{formId}` | One form's counts and, per question, how many submissions got feedback and for which rule |
 
 ```text
 Supported schema import
@@ -281,7 +291,7 @@ Supported schema import
         -> APPROVED (available to learners) or REJECTED (with reason)
 ```
 
-Only Form Reviewers can call these. A form can be decided only once; a repeat returns `409`, and rejecting without a reason returns `400`.
+Only Form Reviewers can call these. The analytics routes return aggregates only: no learner name, username, ID or answer value. A learner who signs in twice counts twice, because each sign-in is a new learner. A form can be decided only once; a repeat returns `409`, and rejecting without a reason returns `400`.
 
 The import endpoint accepts structure only: `{title, source_url, source_available, categories?, fields: [{position, label, input_type, required, validation}]}`. Payloads that carry learner answers are rejected. Each field's `validation` may hold only the rules the attempt module can check, listed below; anything else returns `400`. A second import of a source that is still awaiting review returns `409 DUPLICATE_PENDING_IMPORT`.
 

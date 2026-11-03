@@ -1,7 +1,7 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, Check, ChevronDown, ExternalLink, Gavel, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Gavel, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -202,7 +202,7 @@ function CategoryEditor({ initial, onSave }) {
   );
 }
 
-export default function ReviewDetail({ formId, onBack, api = {} }) {
+export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
   const getReviewForm = api.getReviewForm ?? defaultGetReviewForm;
   const decideForm = api.decideForm ?? defaultDecideForm;
   const updateFormMetadata = api.updateFormMetadata ?? defaultUpdateFormMetadata;
@@ -335,6 +335,9 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
         breadcrumb={[...crumbs, { label: data.title }]}
         meta={<StatusBadge status={data.status} />}
         description={`${data.fields.length} fields · ${required} required · imported ${timeAgo(data.created_at)}`}
+        actions={data.status === 'APPROVED' && onInsights && (
+          <Button variant="outline" onClick={() => onInsights(data.id)}><BarChart3 />Practice insights</Button>
+        )}
       />
 
       {error && <Alert variant="destructive" className="mb-6"><AlertCircle />{error}</Alert>}
