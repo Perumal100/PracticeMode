@@ -73,6 +73,9 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = os.environ.get("DJANGO_FORCE_HTTPS", "false").lower() == "true"
+# The browser extension posts imports (API-15) from chrome-extension://<id>;
+# list that origin here so Django's CSRF origin check accepts it.
+CSRF_TRUSTED_ORIGINS = [origin for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ["reviewer.authentication.SessionAuthenticationWith401"],
