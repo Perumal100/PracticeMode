@@ -57,7 +57,13 @@ if DATABASE_URL:
         "PORT": parsed.port or 5432,
     }}
 else:
-    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+    # IMMEDIATE takes the write lock when a transaction starts. SQLite's default
+    # (DEFERRED) fails concurrent answer saves with "database is locked" (503).
+    DATABASES = {"default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 20},
+    }}
 
 AUTH_PASSWORD_VALIDATORS = []
 LANGUAGE_CODE = "en-us"
