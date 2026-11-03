@@ -27,6 +27,25 @@
     return 'partial';
   }
 
+  // Query parameters that may carry credentials, personal data or tracking.
+  // Everything else (job ids such as gh_jid, form ids) identifies the source
+  // page and is kept.
+  const SENSITIVE_PARAM = /token|auth|session|sess|sid$|key|secret|code|sig|password|pass|email|mail|phone|access|jwt|otp|nonce|^state$|^utm_|clid$/i;
+
+  /** The page address a reviewer can open again: no fragment, no sensitive parameters. */
+  function cleanSourceUrl(href) {
+    try {
+      const url = new URL(href);
+      if (url.protocol === 'file:') return `file://${url.pathname}`;
+      if (!/^https?:$/.test(url.protocol)) return '';
+      url.hash = '';
+      for (const name of [...url.searchParams.keys()]) if (SENSITIVE_PARAM.test(name)) url.searchParams.delete(name);
+      return url.toString();
+    } catch (_) {
+      return '';
+    }
+  }
+
   function buildExport(state) {
     if (!state) return null;
     const steps = (state.steps || []).map((s) => ({
@@ -48,13 +67,18 @@
       unvisited.push({ title: `After step ${steps.length}`, reason: state.blocker.message });
     }
 
+    // A form embedded in an iframe (e.g. a Greenhouse application on a
+    // company careers page) belongs to the page the reviewer opened, so that
+    // page's address and title identify the source.
+    const embedded = state.isTopFrame === false;
     return {
       schema: SCHEMA,
-      formTitle: state.formTitle || steps[0]?.title || 'Untitled form',
+      formTitle: (embedded && state.pageTitle) || state.formTitle || steps[0]?.title || state.pageTitle || 'Untitled form',
       source: {
-        url: state.startUrl,
+        url: state.pageUrl || state.startUrl,
         origin: state.origin,
         environment: state.environment,
+        ...(embedded ? { formUrl: state.startUrl } : {}),
       },
       extraction: {
         status: extractionStatus(state),
@@ -88,5 +112,5 @@
     return `practicemode_${slug}_${kind}_${stamp}.json`;
   }
 
-  PM.exportBuilder = { buildExport, fileName, extractionStatus, SCHEMA };
+  PM.exportBuilder = { buildExport, fileName, extractionStatus, cleanSourceUrl, SCHEMA };
 })();

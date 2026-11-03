@@ -22,3 +22,6 @@ if (!window.matchMedia) {
     addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
   });
 }
+
+// jsdom does not implement scrolling; the practice page scrolls to its result.
+window.scrollTo = () => {};

@@ -167,7 +167,11 @@ async function command(msg, sender = {}) {
     case 'scan': {
       const frame = await findFormFrame(tabId);
       if (frame.error) return { success: false, error: frame.error };
-      const response = await sendToFrame(tabId, frame.frameId, { type: 'PM_ENGINE', action: msg.command, mode: msg.mode });
+      // The address bar page is the form's source, even when the form itself
+      // lives in an embedded frame that cannot see the top page's URL.
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      const page = tab ? { url: tab.url, title: tab.title } : undefined;
+      const response = await sendToFrame(tabId, frame.frameId, { type: 'PM_ENGINE', action: msg.command, mode: msg.mode, page });
       return response.success ? { success: true, value: { frameId: frame.frameId, ...response.value } } : response;
     }
     case 'pause':

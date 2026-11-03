@@ -69,6 +69,18 @@ describe('ReviewDetail', () => {
     expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
   });
 
+  it('an approved form links to its practice insights; a pending one does not', async () => {
+    const onInsights = vi.fn();
+    const approved = { ...pending, status: 'APPROVED', decision: { outcome: 'APPROVED', reviewer: 'reviewer', rejection_reason: '', decided_at: '2026-11-03T10:00:00Z' } };
+    const { unmount } = render(<ReviewDetail formId="f1" onBack={() => {}} onInsights={onInsights} api={{ getReviewForm: vi.fn().mockResolvedValue(approved) }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Practice insights' }));
+    expect(onInsights).toHaveBeenCalledWith('f1');
+    unmount();
+    render(<ReviewDetail formId="f1" onBack={() => {}} onInsights={onInsights} api={{ getReviewForm: vi.fn().mockResolvedValue(pending) }} />);
+    expect(await screen.findByText('First Name')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Practice insights' })).not.toBeInTheDocument();
+  });
+
   it('US-17 AC-02: rejecting needs a reason', async () => {
     const api = setup({ decideForm: vi.fn().mockResolvedValue({ ...pending, status: 'REJECTED' }) });
     fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));

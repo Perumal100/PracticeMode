@@ -1,6 +1,6 @@
 # Sprint 3 Integration Guide
 
-How to combine the Sprint 3 branches into one working build. Each branch has been checked against the others, and the combined result was tested end to end: 116 backend tests, 67 frontend tests, 25 extension unit and 25 end-to-end tests, and a full-stack walkthrough through the web app.
+How the Sprint 3 branches were combined into one working build. The integration was done on `develop-perumal` and `main` was then fast-forwarded to it. The four merge commits show each branch coming in, in the order below. The combined result passes 116 backend tests, 67 frontend tests, and 25 extension unit and 25 end-to-end tests, plus a full-stack walkthrough through the web app. The steps are kept here so the merge can be repeated or audited.
 
 ## Branches
 
@@ -30,7 +30,7 @@ Conflicts from `dev-rohan`. Each resolution keeps both sides:
 | --- | --- |
 | `practicemode/settings.py` | Take `dev-rohan`'s `INSTALLED_APPS` (`accounts`, `reviewer`, `catalog`, `attempts`). Either docstring line is fine. |
 | `practicemode/urls.py` | Keep all four includes: `reviewer.urls`, `accounts.urls`, `catalog.urls`, `attempts.urls`. Their paths and URL names do not overlap. |
-| `README.md` | Combine. Keep the setup and endpoint sections from both, then add the run steps below. |
+| `README.md` | Combined into one README: run steps and demo script, project layout, API reference by area, validation rules, data model, configuration and tests. |
 
 `reviewer/models.py`, `reviewer/migrations/0001` and `0002`, `.gitignore` and `requirements.txt` are identical on every branch that has them, so they merge without conflicts. `attempts.0001` depends on `reviewer.0001` only, so the migration graph stays linear.
 
@@ -73,7 +73,7 @@ These were checked against the running code. Field names in request and response
 | --- | --- | --- | --- |
 | Roles | `accounts.identity`, `reviewer.permissions` | every protected view | Django groups `LEARNER`, `INSTRUCTOR`, `FORM_REVIEWER` on the default user model. |
 | Sign-in (API-01) | `accounts` | frontend, extension, reviewers | `GET /api/session` sets `csrftoken`. `POST /api/login` with `{username, password}` or `{role: "LEARNER", displayName}` returns `{user: {id, displayName, role}}`. |
-| Import (API-15) | extension `shared/import_payload.js` | `reviewer.FormExtractionView` | `{title, source_url, source_available, fields: [{position, label, input_type, required, validation}]}`. `input_type` is one of `text email tel number date select checkbox textarea`. A second import of a source that is still awaiting review returns `409 DUPLICATE_PENDING_IMPORT`. |
+| Import (API-15) | extension `shared/import_payload.js` | `reviewer.FormExtractionView` | `{title, source_url, source_available, fields: [{position, label, input_type, required, validation}]}`. `input_type` is one of `text email tel url number date select checkbox textarea`. A second import of a source that is still awaiting review returns `409 DUPLICATE_PENDING_IMPORT`. |
 | Validation rules | `reviewer.FormField.validation` | `attempts.validation.check_schema` | `minLength`/`maxLength` on text-like fields, `min`/`max` on numbers, `allowedValues` (required) on selects. The import endpoint rejects any other rule with `400`, so every approved form can be practised. |
 | Categories | `reviewer.PracticeForm.categories` (Dev-Atheer) | `catalog` | JSON list of labels. `GET /api/forms?category=A&category=B` matches any selected category, ignoring case. |
 | Attempt read (API-05) | `attempts` | `frontend/src/features/autosave` | `{id, formId, status, startedAt, lastSavedAt, completedAt, validationFeedback, answers: [{fieldId, value, savedAt}]}` |

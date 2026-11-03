@@ -118,3 +118,18 @@ test('the success message reports what was imported and what was left out', () =
   assert.match(message, /Left out 1: Upload Resume \(file uploads/);
   assert.match(message, /1 field changed/);
 });
+
+test('link fields become url, including plain text boxes that ask for a link', () => {
+  const linkedin = { fieldId: 'q1', label: 'LinkedIn Profile', name: 'question_31', type: 'text', validation: { maxLength: 255 } };
+  const website = { fieldId: 'q2', label: 'Website', type: 'text' };
+  const portfolio = { fieldId: 'q3', label: 'Work samples', name: 'portfolio_url', type: 'text' };
+  const hinted = { fieldId: 'q4', label: 'Anything else', type: 'text', placeholder: 'https://' };
+  const native = { fieldId: 'q5', label: 'Homepage', type: 'url' };
+  const question = { fieldId: 'q6', label: 'How did you hear about us? (LinkedIn, a website, …)', type: 'text' };
+  const essay = { fieldId: 'q7', label: 'Link to your portfolio', type: 'textarea' };
+  const { payload, notes } = buildImportPayload(doc([linkedin, website, portfolio, hinted, native, question, firstName, essay]));
+  assert.deepEqual(payload.fields.map((f) => f.input_type), ['url', 'url', 'url', 'url', 'url', 'text', 'text', 'textarea']);
+  assert.deepEqual(payload.fields[0].validation, { maxLength: 255 });
+  assert.deepEqual(notes.map((n) => n.label), ['LinkedIn Profile', 'Website', 'Work samples', 'Anything else']);
+  assert.ok(BACKEND_TYPES.includes('url'));
+});

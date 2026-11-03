@@ -13,6 +13,7 @@ const form = {
     { id: 'email', position: 2, label: 'Email', input_type: 'email', required: false, validation: {} },
     { id: 'size', position: 3, label: 'Household size', input_type: 'select', required: true, validation: { allowedValues: ['1', '2', '3+'] } },
     { id: 'agree', position: 4, label: 'I understand this is practice', input_type: 'checkbox', required: false, validation: {} },
+    { id: 'linkedin', position: 5, label: 'LinkedIn profile', input_type: 'url', required: false, validation: { maxLength: 255 } },
   ],
 };
 const attempt = (overrides = {}) => ({ id: 'a1', formId: 'f1', status: 'IN_PROGRESS', answers: [], validationFeedback: [], ...overrides });
@@ -52,6 +53,7 @@ describe('PracticeForm', () => {
     expect(screen.getByLabelText(/Full name/)).toHaveAttribute('type', 'text');
     expect(screen.getByLabelText(/Email/)).toHaveAttribute('type', 'email');
     expect(screen.getByLabelText(/I understand/)).toHaveAttribute('type', 'checkbox');
+    expect(screen.getByLabelText(/LinkedIn profile/)).toHaveAttribute('type', 'url');
     const select = screen.getByLabelText(/Household size/);
     expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose…', '1', '2', '3+']);
     expect(screen.getByLabelText(/Full name/)).toHaveAttribute('aria-required', 'true');

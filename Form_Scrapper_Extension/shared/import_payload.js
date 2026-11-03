@@ -18,11 +18,11 @@
 (() => {
   const PM = (globalThis.PracticeMode = globalThis.PracticeMode || {});
 
-  const BACKEND_TYPES = ['text', 'email', 'tel', 'number', 'date', 'select', 'checkbox', 'textarea'];
+  const BACKEND_TYPES = ['text', 'email', 'tel', 'number', 'date', 'select', 'checkbox', 'textarea', 'url'];
 
   // Extension field type -> backend input_type. Choice lists become a select.
   const TYPE_MAP = {
-    text: 'text', search: 'text', url: 'text',
+    text: 'text', search: 'text', url: 'url',
     email: 'email', tel: 'tel',
     number: 'number', range: 'number',
     date: 'date',
@@ -37,7 +37,19 @@
     'checkbox-group': 'multiple-choice checkbox groups are not supported yet',
   };
 
-  const LENGTH_TYPES = new Set(['text', 'email', 'tel', 'textarea']);
+  const LENGTH_TYPES = new Set(['text', 'email', 'tel', 'textarea', 'url']);
+
+  // Many sites (Greenhouse, Lever) ask for profile links in plain text boxes.
+  // Such a box becomes a link field so learners get the link check; the
+  // reviewer sees a note and can change it back.
+  const LINK_HINT = /\b(urls?|links?|website|web\s*site|homepage|portfolio|linkedin|github|gitlab|blog)\b/i;
+  const NOT_A_LINK = /\?|hear about|how did|referr|worked|employ/i;
+
+  function asksForLink(field) {
+    if (/\burl\b/i.test(field.autocomplete || '') || /^https?:\/\//i.test(field.placeholder || '')) return true;
+    const label = String(field.label || '');
+    return (LINK_HINT.test(label) || LINK_HINT.test(String(field.name || '').replace(/[_-]+/g, ' '))) && !NOT_A_LINK.test(label);
+  }
   const TITLE_MAX = 200;
   const LABEL_MAX = 300;
 
@@ -117,7 +129,7 @@
           skipped.push({ label, type: field.type, reason });
           continue;
         }
-        const inputType = TYPE_MAP[field.type];
+        const inputType = TYPE_MAP[field.type] === 'text' && asksForLink(field) ? 'url' : TYPE_MAP[field.type];
         const { rules, dropped } = rulesFor(field, inputType);
         if (inputType === 'select' && !rules.allowedValues.length) {
           skipped.push({ label, type: field.type, reason: 'no options were captured' });
@@ -128,6 +140,7 @@
         const required = Boolean(field.required) && !field.conditional;
         if (field.required && field.conditional) notes.push({ label, message: 'conditional field imported as optional' });
         if (field.type !== inputType && inputType === 'select') notes.push({ label, message: `${field.type} imported as a choice list` });
+        if (field.type !== 'url' && inputType === 'url') notes.push({ label, message: 'text box imported as a link because it asks for one' });
         if (dropped.length) notes.push({ label, message: `left out unsupported rules: ${dropped.join(', ')}` });
 
         fields.push({ position: fields.length + 1, label, input_type: inputType, required, validation: rules });

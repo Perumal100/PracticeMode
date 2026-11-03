@@ -87,6 +87,7 @@ class ImportContractTests(TestCase):
             {"position": 2, "label": "Age", "input_type": "number", "validation": {"min": "18", "max": 120}},
             {"position": 3, "label": "Size", "input_type": "select", "validation": {"allowedValues": ["1", "2"]}},
             {"position": 4, "label": "Agree", "input_type": "checkbox"},
+            {"position": 5, "label": "LinkedIn profile", "input_type": "url", "validation": {"maxLength": 255}},
         ))
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 

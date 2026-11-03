@@ -1,4 +1,4 @@
-// Minimal hash router: #/forms, #/forms/<id>, #/review, #/review/<id>.
+// Minimal hash router: #/forms, #/forms/<id>, #/review, #/review/<id>, #/insights, #/insights/<id>.
 import { useEffect, useState } from 'react';
 
 function parse() {

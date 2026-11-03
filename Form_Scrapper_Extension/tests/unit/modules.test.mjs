@@ -156,6 +156,30 @@ test('an active blocker is reported as an unvisited step', () => {
   assert.equal(doc.extraction.status, 'partial');
 });
 
+test('source URLs keep identifying parameters and drop sensitive ones', () => {
+  const clean = exportBuilder.cleanSourceUrl;
+  assert.equal(clean('https://careers.datadoghq.com/detail/8052118/?gh_jid=8052118'), 'https://careers.datadoghq.com/detail/8052118/?gh_jid=8052118');
+  assert.equal(
+    clean('https://jobs.example.com/apply?job=42&token=abc&session_id=x&utm_source=li&gclid=1&Email=a%40b.c#top'),
+    'https://jobs.example.com/apply?job=42',
+  );
+  assert.equal(clean('chrome://extensions'), '');
+  assert.equal(clean('not a url'), '');
+});
+
+test('an embedded form takes its source and title from the top page', () => {
+  const steps = [{ step: 1, title: 'Apply for this job', url: 'https://boards.example/embed/job_app', fieldCount: 1, fields: [{ fieldId: 'a', order: 1, label: 'Name', type: 'text' }] }];
+  const base = { mode: 'auto', status: 'complete', completionReason: 'reached_final_step', steps, formTitle: 'Apply for this job', startUrl: 'https://boards.example/embed/job_app' };
+  const embedded = exportBuilder.buildExport({ ...base, isTopFrame: false, pageUrl: 'https://careers.example.com/detail/1/?gh_jid=1', pageTitle: 'Senior Engineer | Example Careers' });
+  assert.equal(embedded.source.url, 'https://careers.example.com/detail/1/?gh_jid=1');
+  assert.equal(embedded.source.formUrl, 'https://boards.example/embed/job_app');
+  assert.equal(embedded.formTitle, 'Senior Engineer | Example Careers');
+  const topLevel = exportBuilder.buildExport({ ...base, isTopFrame: true, pageUrl: 'https://forms.example/apply?id=7', pageTitle: 'Tab title' });
+  assert.equal(topLevel.source.url, 'https://forms.example/apply?id=7');
+  assert.equal(topLevel.formTitle, 'Apply for this job');
+  assert.equal(topLevel.source.formUrl, undefined);
+});
+
 test('export is plain JSON with a stable file name', () => {
   const doc = exportBuilder.buildExport(baseState());
   assert.deepEqual(JSON.parse(JSON.stringify(doc)), doc);
