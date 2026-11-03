@@ -111,6 +111,9 @@ class ReviewDecisionView(APIView):
             )
             practice_form.status = FormStatus.APPROVED if is_approved else FormStatus.REJECTED
             practice_form.save(update_fields=["status", "updated_at"])
+            # An approved revision takes the original's place in the catalog.
+            if is_approved and practice_form.revision_of_id:
+                PracticeForm.objects.filter(id=practice_form.revision_of_id, status=FormStatus.APPROVED).update(status=FormStatus.SUPERSEDED)
             ReviewNotification.objects.filter(practice_form=practice_form).update(is_read=True)
 
         response_form = PracticeForm.objects.prefetch_related("fields").select_related("review_decision__reviewer").get(id=form_id)
@@ -254,6 +257,40 @@ class ReviewFieldOrderView(APIView):
             _renumber(practice_form, ordered_ids)
             practice_form.save(update_fields=["updated_at"])
         return _form_response(form_id)
+
+
+class ReviewRevisionView(APIView):
+    """Start revising an approved form, e.g. after the source page changed.
+    Learners keep the current version until the revision is approved."""
+
+    permission_classes = [IsFormReviewer]
+
+    def post(self, request, form_id):
+        with transaction.atomic():
+            try:
+                original = PracticeForm.objects.select_for_update().get(id=form_id)
+            except PracticeForm.DoesNotExist:
+                raise NotFound({"error": "FORM_NOT_FOUND"}) from None
+            if original.status != FormStatus.APPROVED:
+                raise Conflict(detail="Only approved forms can be revised.")
+            # API-15 still holds: one pending copy per source.
+            pending = PracticeForm.objects.filter(source_url=original.source_url, status=FormStatus.AWAITING_REVIEW).first()
+            if pending:
+                return Response({
+                    "error": "REVISION_PENDING",
+                    "message": "A copy of this form is already awaiting review.",
+                    "formId": str(pending.id),
+                }, status=status.HTTP_409_CONFLICT)
+            revision = PracticeForm.objects.create(
+                title=original.title, source_url=original.source_url, source_available=original.source_available,
+                categories=original.categories, revision_of=original,
+            )
+            FormField.objects.bulk_create([
+                FormField(practice_form=revision, position=field.position, label=field.label,
+                          input_type=field.input_type, required=field.required, validation=field.validation)
+                for field in original.fields.all()
+            ])
+        return _form_response(revision.id, status.HTTP_201_CREATED)
 
 
 class ReviewPreviewCheckView(APIView):

@@ -16,16 +16,30 @@ class PracticeFormQueueSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PracticeForm
-        fields = ("id", "title", "source_url", "source_available", "categories", "failure_reason", "status", "created_at", "field_count")
+        fields = ("id", "title", "source_url", "source_available", "categories", "failure_reason", "status", "created_at", "field_count", "revision_of")
 
 
 class PracticeFormDetailSerializer(serializers.ModelSerializer):
     fields = FormFieldSerializer(many=True, read_only=True)
     decision = serializers.SerializerMethodField()
+    open_revision = serializers.SerializerMethodField()
+    replaced_by = serializers.SerializerMethodField()
 
     class Meta:
         model = PracticeForm
-        fields = ("id", "title", "source_url", "source_available", "categories", "failure_reason", "status", "created_at", "updated_at", "fields", "decision")
+        fields = (
+            "id", "title", "source_url", "source_available", "categories", "failure_reason", "status",
+            "created_at", "updated_at", "fields", "decision", "revision_of", "open_revision", "replaced_by",
+        )
+
+    def get_open_revision(self, obj):
+        revision = obj.revisions.filter(status=FormStatus.AWAITING_REVIEW).first()
+        return revision and str(revision.id)
+
+    def get_replaced_by(self, obj):
+        revision = obj.revisions.filter(status=FormStatus.APPROVED).first()
+        return revision and str(revision.id)
+
     def get_decision(self, obj):
         try:
             decision = obj.review_decision

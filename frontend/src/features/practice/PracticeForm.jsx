@@ -1,6 +1,6 @@
 // US-11 practise an approved form, US-08 autosave and resume, US-26 complete
 // and see validation feedback.
-import { AlertCircle, CheckCircle2, CircleAlert, CloudOff, Loader2, RotateCcw, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle2, CircleAlert, CloudOff, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/page-header.jsx';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.jsx';
@@ -22,6 +22,7 @@ import { rememberAttempt, storedAttempt } from './attemptStore.js';
 const FORM_ERRORS = {
   403: 'This form is not available for practice. It may still be awaiting review or may have been rejected.',
   404: 'This practice form does not exist.',
+  410: 'This form was updated to match the real form. Practise the new version instead.',
 };
 const START_ERRORS = {
   403: 'This form is not available for practice. It may still be awaiting review or may have been rejected.',
@@ -30,7 +31,7 @@ const START_ERRORS = {
 
 const answered = (value) => value !== null && value !== undefined && value !== '' && value !== false;
 
-export default function PracticeForm({ formId, user, onBack, api = {} }) {
+export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {} }) {
   const getForm = api.getForm ?? defaultGetForm;
   const startAttempt = api.startAttempt ?? defaultStartAttempt;
   const [form, setForm] = useState({ status: 'loading', data: null, error: null });
@@ -41,7 +42,10 @@ export default function PracticeForm({ formId, user, onBack, api = {} }) {
     let cancelled = false;
     getForm(formId).then(
       (data) => !cancelled && setForm({ status: 'ready', data, error: null }),
-      (error) => !cancelled && setForm({ status: 'error', data: null, error: FORM_ERRORS[error?.status] ?? 'The form could not be loaded. Please try again.' }),
+      (error) => !cancelled && setForm({
+        status: 'error', data: null, replacedBy: error?.body?.replacedBy,
+        error: FORM_ERRORS[error?.status] ?? 'The form could not be loaded. Please try again.',
+      }),
     );
     return () => { cancelled = true; };
   }, [formId, getForm]);
@@ -75,9 +79,14 @@ export default function PracticeForm({ formId, user, onBack, api = {} }) {
   if (form.status === 'error') {
     return (
       <>
-        <PageHeader title="Form unavailable" breadcrumb={[{ label: 'Practice forms', onClick: onBack }, { label: 'Unavailable' }]} />
-        <Alert variant="destructive"><AlertCircle />{form.error}</Alert>
-        <Button variant="outline" className="mt-4" onClick={onBack}>Back to practice forms</Button>
+        <PageHeader title={form.replacedBy ? 'This form was updated' : 'Form unavailable'} breadcrumb={[{ label: 'Practice forms', onClick: onBack }, { label: 'Unavailable' }]} />
+        {form.replacedBy
+          ? <Alert variant="info"><RefreshCw />{form.error}</Alert>
+          : <Alert variant="destructive"><AlertCircle />{form.error}</Alert>}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {form.replacedBy && onOpenForm && <Button onClick={() => onOpenForm(form.replacedBy)}>Open the updated form</Button>}
+          <Button variant="outline" onClick={onBack}>Back to practice forms</Button>
+        </div>
       </>
     );
   }

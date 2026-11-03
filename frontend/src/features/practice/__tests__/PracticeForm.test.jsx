@@ -28,7 +28,7 @@ function setup(overrides = {}) {
     debounceMs: 0,
     ...overrides,
   };
-  render(<PracticeForm formId="f1" user={user} onBack={() => {}} api={api} />);
+  render(<PracticeForm formId="f1" user={user} onBack={() => {}} onOpenForm={api.onOpenForm} api={api} />);
   return api;
 }
 
@@ -128,6 +128,13 @@ describe('PracticeForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('not available for practice');
     expect(screen.queryByRole('button', { name: 'Start practice' })).not.toBeInTheDocument();
     expect(api.startAttempt).not.toHaveBeenCalled();
+  });
+
+  it('a form replaced by a revision points the learner to the updated version', async () => {
+    const api = setup({ onOpenForm: vi.fn(), getForm: vi.fn().mockRejectedValue(new ApiError(410, 'FORM_REPLACED', 'x', { replacedBy: 'f2' })) });
+    expect(await screen.findByRole('status')).toHaveTextContent('updated to match the real form');
+    fireEvent.click(screen.getByRole('button', { name: 'Open the updated form' }));
+    expect(api.onOpenForm).toHaveBeenCalledWith('f2');
   });
 
   it('asks before submitting with required questions unanswered, and can be cancelled', async () => {

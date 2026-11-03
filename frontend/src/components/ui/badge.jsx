@@ -24,6 +24,7 @@ const STATUS = {
   APPROVED: ['success', 'Approved'],
   REJECTED: ['destructive', 'Rejected'],
   FAILED: ['destructive', 'Failed'],
+  SUPERSEDED: ['secondary', 'Replaced'],
   IN_PROGRESS: ['default', 'In progress'],
   COMPLETED: ['success', 'Submitted'],
 };

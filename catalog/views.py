@@ -40,6 +40,13 @@ class FormDetailView(APIView):
             form = PracticeForm.objects.get(pk=form_id)
         except PracticeForm.DoesNotExist:
             return Response({"error": "FORM_NOT_FOUND"}, status=404)
+        if form.status == FormStatus.SUPERSEDED:
+            current = form.current_version()
+            return Response({
+                "error": "FORM_REPLACED",
+                "message": "This form was updated to match the real form.",
+                "replacedBy": current and str(current.id),
+            }, status=410)
         if form.status != FormStatus.APPROVED:
             return Response({
                 "error": "FORM_NOT_APPROVED",

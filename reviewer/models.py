@@ -10,6 +10,7 @@ class FormStatus(models.TextChoices):
     APPROVED = "APPROVED", "Approved"
     REJECTED = "REJECTED", "Rejected"
     FAILED = "FAILED", "Failed"
+    SUPERSEDED = "SUPERSEDED", "Replaced by a revision"
 
 
 class PracticeForm(models.Model):
@@ -22,6 +23,8 @@ class PracticeForm(models.Model):
     categories = models.JSONField(default=list, blank=True)
     failure_reason = models.TextField(blank=True)
     status = models.CharField(max_length=32, choices=FormStatus.choices, default=FormStatus.AWAITING_REVIEW)
+    # A revision is a reviewed copy of an approved form; approving it replaces the original.
+    revision_of = models.ForeignKey("self", null=True, blank=True, related_name="revisions", on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -30,6 +33,15 @@ class PracticeForm(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+    def current_version(self):
+        """The approved form learners now practise in place of this one, if any."""
+        form = self
+        while form.status == FormStatus.SUPERSEDED:
+            form = form.revisions.filter(status__in=[FormStatus.APPROVED, FormStatus.SUPERSEDED]).first()
+            if form is None:
+                return None
+        return form if form.status == FormStatus.APPROVED else None
 
     def clean(self):
         super().clean()

@@ -43,3 +43,8 @@ export function reorderFields(formId, fieldIds) {
 export function checkPreviewAnswers(formId, answers) {
   return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/preview-check`, { method: 'POST', body: { answers } });
 }
+
+// A copy of an approved form to correct after its source changed (pending until approved).
+export function reviseForm(formId) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/revisions`, { method: 'POST' });
+}

@@ -11,7 +11,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 3 goal** | A Form Reviewer can import a real web form with the browser extension, verify and correct it, and publish it. A learner can then find that form, practise it with autosave, and get feedback on their answers. |
 | **Status** | 10 of 16 MVP user stories implemented; the other 6 stay in the product backlog for Sprint 4. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 145 backend · 86 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
+| **Tests** | 150 backend · 89 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -78,6 +78,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 - **Preview:** try the form exactly as learners will see it, and check sample answers with the same rules learners get. Nothing is saved.
 - **Corrections before deciding:** edit the title and source page; add, edit, reorder and remove fields; set categories. Every change is re-checked with the import rules.
 - **Decision:** approve, or reject with a reason, after a confirmation. Decisions are recorded and cannot be repeated.
+- **Revising a published form:** when the real form changes, **Revise form** opens an editable copy for review. Learners keep practising the current version until the revision is approved; it then replaces the current version (status *Replaced*), and old links send learners to the new one. Attempts on the old version are kept. Rejecting the revision leaves the current version published.
 - **Practice insights** (counts only, never who or what was typed):
   - learners who practised, attempts started and submitted, and submissions with no feedback
   - attempts per day over the last 7, 14 or 30 days
@@ -182,8 +183,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 145 backend tests
-(cd frontend && npm test)                           # 86 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 150 backend tests
+(cd frontend && npm test)                           # 89 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 26 end-to-end
 ```
 
@@ -248,7 +249,7 @@ Paths have no trailing slash. Unsafe requests require the session cookies and `X
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/forms?keyword=...&category=...` | Approved forms, newest first |
-| `GET` | `/api/forms/{formId}` | An approved form and its fields in position order |
+| `GET` | `/api/forms/{formId}` | An approved form and its fields in position order; a replaced form returns `410` with `replacedBy` |
 
 Catalog list is a plain array of `{id, title, status, categories}`; detail adds `fields: [{id, position, label, input_type, required, validation}]`. Empty results are `[]`. `category` may be repeated up to 10 times (`?category=Housing&category=Education`); a form matches when it has any selected category, ignoring case, and keyword and category filters combine. Blank/repeated/oversized keyword values, blank or oversized categories, and unknown filters return `400`. Missing forms return `404`; unapproved details return `403 FORM_NOT_APPROVED`. Reviewer/source metadata and unavailable guidance/options are omitted.
 
@@ -294,6 +295,7 @@ Completion accepts no body. Policy A follows DD-05/API-16: the first successful 
 | `DELETE` | `/api/review/forms/{formId}/fields/{fieldId}` | Remove a field the source does not have (at least one must remain) |
 | `PUT` | `/api/review/forms/{formId}/fields/order` | `{"fieldIds": [...]}` puts the fields in the source's order |
 | `POST` | `/api/review/forms/{formId}/preview-check` | `{"answers": {fieldId: value}}` returns the `validationFeedback` a learner would get; nothing is saved |
+| `POST` | `/api/review/forms/{formId}/revisions` | Start revising an approved form: returns a pending copy (`201`), or `409` with `formId` when a copy from that source already awaits review |
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
 | `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
 | `POST` | `/api/forms/extractions` | Import an extracted form for review (used by the browser extension) |

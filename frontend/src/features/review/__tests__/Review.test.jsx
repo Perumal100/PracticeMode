@@ -95,6 +95,42 @@ describe('ReviewDetail', () => {
     expect(api.updateField).not.toHaveBeenCalled();
   });
 
+  it('an approved form is revised as a pending copy; learners keep the current version until it is approved', async () => {
+    const approved = { ...pending, status: 'APPROVED', open_revision: null, decision: { outcome: 'APPROVED', reviewer: 'reviewer', rejection_reason: '', decided_at: '2026-11-03T10:00:00Z' } };
+    const onOpenForm = vi.fn();
+    const reviseForm = vi.fn().mockResolvedValue({ ...pending, id: 'f2', revision_of: 'f1' });
+    const { unmount } = render(<ReviewDetail formId="f1" onBack={() => {}} onOpenForm={onOpenForm} api={{ getReviewForm: vi.fn().mockResolvedValue(approved), reviseForm }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Revise form' }));
+    expect(reviseForm).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Start revision' }));
+    await waitFor(() => expect(onOpenForm).toHaveBeenCalledWith('f2'));
+    unmount();
+
+    // The revision explains itself, links back, and says what approving does.
+    const { unmount: unmount2 } = render(<ReviewDetail formId="f2" onBack={() => {}} onOpenForm={onOpenForm} api={{ getReviewForm: vi.fn().mockResolvedValue({ ...pending, id: 'f2', revision_of: 'f1' }) }} />);
+    expect(await screen.findByText('This is a revision of a published form')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /View current version/ }));
+    expect(onOpenForm).toHaveBeenLastCalledWith('f1');
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(await screen.findByText(/instead of the current one/)).toBeInTheDocument();
+    unmount2();
+
+    // While a revision is pending, the original opens it instead of starting another.
+    render(<ReviewDetail formId="f1" onBack={() => {}} onOpenForm={onOpenForm} api={{ getReviewForm: vi.fn().mockResolvedValue({ ...approved, open_revision: 'f2' }) }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open revision' }));
+    expect(onOpenForm).toHaveBeenLastCalledWith('f2');
+    expect(screen.queryByRole('button', { name: 'Revise form' })).not.toBeInTheDocument();
+  });
+
+  it('a replaced version says so and links to the newer one', async () => {
+    const onOpenForm = vi.fn();
+    render(<ReviewDetail formId="f1" onBack={() => {}} onOpenForm={onOpenForm} api={{ getReviewForm: vi.fn().mockResolvedValue({ ...pending, status: 'SUPERSEDED', replaced_by: 'f2' }) }} />);
+    expect(await screen.findByText('Replaced by a newer version')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revise form' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Open newer version/ }));
+    expect(onOpenForm).toHaveBeenCalledWith('f2');
+  });
+
   it('an approved form links to its practice insights; a pending one does not', async () => {
     const onInsights = vi.fn();
     const approved = { ...pending, status: 'APPROVED', decision: { outcome: 'APPROVED', reviewer: 'reviewer', rejection_reason: '', decided_at: '2026-11-03T10:00:00Z' } };

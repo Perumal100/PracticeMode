@@ -80,7 +80,7 @@ export default function App({ getSession = defaultGetSession, signOut = defaultS
     let page;
     if (user.role === 'LEARNER') {
       page = route.id
-        ? <PracticeForm key={route.id} formId={route.id} user={user} onBack={() => navigate('/forms')} />
+        ? <PracticeForm key={route.id} formId={route.id} user={user} onBack={() => navigate('/forms')} onOpenForm={(id) => navigate(`/forms/${id}`)} />
         : <Catalog user={user} onOpen={(id) => navigate(`/forms/${id}`)} />;
     } else if (user.role === 'FORM_REVIEWER' && route.section === 'insights') {
       page = route.id
@@ -88,7 +88,7 @@ export default function App({ getSession = defaultGetSession, signOut = defaultS
         : <Insights onOpen={(id) => navigate(`/insights/${id}`)} />;
     } else if (user.role === 'FORM_REVIEWER') {
       page = route.id
-        ? <ReviewDetail key={route.id} formId={route.id} onBack={() => navigate('/review')} onInsights={(id) => navigate(`/insights/${id}`)} />
+        ? <ReviewDetail key={route.id} formId={route.id} onBack={() => navigate('/review')} onInsights={(id) => navigate(`/insights/${id}`)} onOpenForm={(id) => navigate(`/review/${id}`)} />
         : <ReviewQueue onOpen={(id) => navigate(`/review/${id}`)} />;
     } else {
       page = <InstructorHome />;

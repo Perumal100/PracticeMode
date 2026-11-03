@@ -102,6 +102,7 @@ export default function ReviewQueue({ onOpen, api = {} }) {
                       <div className="font-medium">{form.title}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <StatusBadge status={form.status} />
+                        {form.revision_of && <Badge variant="outline">Revision</Badge>}
                         {(form.categories ?? []).map((c) => <Badge key={c} variant="secondary">{c}</Badge>)}
                       </div>
                     </TableCell>

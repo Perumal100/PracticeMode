@@ -1,7 +1,7 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Eye, Gavel, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Eye, Gavel, History, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -23,6 +23,7 @@ import {
   deleteField as defaultDeleteField,
   getReviewForm as defaultGetReviewForm,
   reorderFields as defaultReorderFields,
+  reviseForm as defaultReviseForm,
   updateField as defaultUpdateField,
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
@@ -139,6 +140,19 @@ function DetailsEditor({ data, onSave, onCancel }) {
   );
 }
 
+function VersionNotice({ title, text, action, onClick }) {
+  return (
+    <Alert variant="info" className="mb-6 flex-wrap items-start">
+      <History />
+      <div className="min-w-0 flex-1">
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription>{text}</AlertDescription>
+      </div>
+      {onClick && <Button variant="outline" size="sm" className="ml-7 sm:ml-0" onClick={onClick}>{action}<ArrowRight /></Button>}
+    </Alert>
+  );
+}
+
 export function describeRules(validation = {}) {
   const parts = [];
   if (validation.allowedValues) parts.push(`Options: ${validation.allowedValues.join(', ')}`);
@@ -203,7 +217,7 @@ function CategoryEditor({ initial, onSave }) {
   );
 }
 
-export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
+export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, api = {} }) {
   const getReviewForm = api.getReviewForm ?? defaultGetReviewForm;
   const decideForm = api.decideForm ?? defaultDecideForm;
   const updateFormMetadata = api.updateFormMetadata ?? defaultUpdateFormMetadata;
@@ -211,11 +225,13 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
   const updateField = api.updateField ?? defaultUpdateField;
   const deleteField = api.deleteField ?? defaultDeleteField;
   const reorderFields = api.reorderFields ?? defaultReorderFields;
+  const reviseForm = api.reviseForm ?? defaultReviseForm;
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
   const [editingDetails, setEditingDetails] = useState(false);
   const [fieldEditor, setFieldEditor] = useState({ open: false, field: null });
   const [toDelete, setToDelete] = useState(null);
   const [previewing, setPreviewing] = useState(false);
+  const [confirmRevise, setConfirmRevise] = useState(false);
   const [moving, setMoving] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState(null);
@@ -255,6 +271,21 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
           : reviewErrorMessage(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function revise() {
+    setConfirmRevise(false);
+    setError(null);
+    setBusy(true);
+    try {
+      const revision = await reviseForm(formId);
+      toast.success('Revision started. Learners keep the current version until you approve this one.');
+      onOpenForm?.(revision.id);
+    } catch (err) {
+      setBusy(false);
+      if (err?.body?.error === 'REVISION_PENDING') onOpenForm?.(err.body.formId);
+      else setError(err?.status === 409 ? 'Only approved forms can be revised. Reload to see the current status.' : reviewErrorMessage(err));
     }
   }
 
@@ -336,11 +367,14 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
         title={data.title}
         breadcrumb={[...crumbs, { label: data.title }]}
         meta={<StatusBadge status={data.status} />}
-        description={`${data.fields.length} fields · ${required} required · imported ${timeAgo(data.created_at)}`}
+        description={`${data.fields.length} fields · ${required} required · ${data.revision_of ? 'revision started' : 'imported'} ${timeAgo(data.created_at)}`}
         actions={(
           <>
             <Button variant="outline" onClick={() => setPreviewing(true)}><Eye />Preview form</Button>
-            {data.status === 'APPROVED' && onInsights && (
+            {data.status === 'APPROVED' && (data.open_revision
+              ? <Button variant="outline" onClick={() => onOpenForm?.(data.open_revision)}><History />Open revision</Button>
+              : <Button variant="outline" disabled={busy} onClick={() => setConfirmRevise(true)}><History />Revise form</Button>)}
+            {['APPROVED', 'SUPERSEDED'].includes(data.status) && onInsights && (
               <Button variant="outline" onClick={() => onInsights(data.id)}><BarChart3 />Practice insights</Button>
             )}
           </>
@@ -348,6 +382,22 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
       />
 
       {error && <Alert variant="destructive" className="mb-6"><AlertCircle />{error}</Alert>}
+      {data.revision_of && pending && (
+        <VersionNotice
+          title="This is a revision of a published form"
+          text="Learners keep practising the current version until you approve this one, which then replaces it. Rejecting leaves the current version as it is."
+          action="View current version"
+          onClick={() => onOpenForm?.(data.revision_of)}
+        />
+      )}
+      {data.status === 'SUPERSEDED' && (
+        <VersionNotice
+          title="Replaced by a newer version"
+          text="Learners no longer see this version. Their earlier attempts on it are kept."
+          action="Open newer version"
+          onClick={data.replaced_by ? () => onOpenForm?.(data.replaced_by) : undefined}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
@@ -516,13 +566,30 @@ export default function ReviewDetail({ formId, onBack, onInsights, api = {} }) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={confirmRevise} onOpenChange={setConfirmRevise}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revise “{data.title}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Use this when the real form has changed. An editable copy opens for review. Learners keep practising the current version until you approve the revision.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={revise}>Start revision</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{confirm === 'APPROVE' ? 'Approve this form?' : 'Reject this form?'}</AlertDialogTitle>
             <AlertDialogDescription>
               {confirm === 'APPROVE'
-                ? 'Learners will be able to start practice attempts on it. A decision cannot be changed later.'
+                ? data.revision_of
+                  ? 'Learners will practise this version instead of the current one. Attempts already made on the current version are kept.'
+                  : 'Learners will be able to start practice attempts on it. A decision cannot be changed later.'
                 : `Learners will not be able to practise it. Reason: “${reason.trim()}”`}
             </AlertDialogDescription>
           </AlertDialogHeader>
