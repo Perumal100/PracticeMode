@@ -1,43 +1,23 @@
-# Development Workflow
+# PracticeMode Development Workflow
 
-## Delivery model
+## Stack
 
-SkillLoop uses Scrum with two-week sprints. GitHub is the canonical place for requirements, issues, source code, reviews, releases, and project documentation.
+- Frontend: React (to be integrated with the REST API)
+- Backend: Django and Django REST Framework
+- Database: PostgreSQL in deployment; SQLite only as the local default
+- Tests: Django test client for APIs, then frontend and end-to-end tests as those layers are added
 
-## GitHub workflow
+## Branch and review workflow
 
-1. Create or select a backlog issue before implementation.
-2. Assign the issue to a sprint and add acceptance criteria.
-3. Create a focused branch from `main` using `feature/<issue-number>-short-name`, `fix/<issue-number>-short-name`, or `docs/<issue-number>-short-name`.
-4. Make small, clear commits that reference the issue, for example `feat: add quarterly goal form (#12)`.
-5. Open a pull request using the repository template.
-6. Ensure automated checks pass and review acceptance criteria before merging.
-7. Squash merge to `main`, close the issue, and update the GitHub Project board.
+1. Create focused work from `develop`; do not push directly to `main`.
+2. Keep each story's API, permission rules, tests, and documentation together.
+3. Run `python manage.py test` and `python manage.py check` before committing.
+4. Open a pull request into `develop`, then merge release-ready work into `main` only after team review.
 
-## Branch protection for main
+## Reviewer data rules
 
-Configure these GitHub repository rules after the remote repository is created:
-
-- Require a pull request before merging.
-- Require at least one approval when working with collaborators.
-- Require passing CI checks.
-- Require resolved review conversations.
-- Block force pushes and direct pushes to `main`.
-
-## Definition of Done
-
-- Acceptance criteria are met.
-- Relevant unit, API, or end-to-end tests pass.
-- Code has been reviewed through a pull request.
-- Documentation is updated when behavior or setup changes.
-- No secrets, real employee data, or sensitive sample data are committed.
-
-## Repository structure
-
-```text
-docs/          Product, architecture, and delivery documents
-frontend/      React application (Sprint 2)
-backend/       FastAPI application (Sprint 2)
-infra/         Local development and deployment configuration (later)
-.github/       Issue templates, pull-request template, and CI workflows
-```
+- A `PracticeForm` enters the reviewer workflow as `AWAITING_REVIEW`.
+- A decision is atomic: its review record and the form status are saved together.
+- `APPROVED` permits a later learner-attempt module to publish/use the form. `REJECTED` does not.
+- Source-schema imports carry field structure only. They must not carry learner answers.
+- The `FORM_REVIEWER` Django group is required at the API boundary. Hiding a screen is not access control.

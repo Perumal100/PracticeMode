@@ -1,45 +1,28 @@
-# SkillLoop Product Requirements Document
-
-## Problem
-
-Employee work is scattered across projects, updates, and manager notes. During a review cycle, managers can miss important contributions or rely too heavily on recent work. Employees also need a clearer way to connect their work to demonstrated skills and career development.
+# PracticeMode Product Requirements
 
 ## Product objective
 
-Create one transparent workflow where employees submit work evidence, AI creates evidence-linked draft feedback, and managers make final review decisions.
+Enable learners to rehearse online forms in a controlled environment. Practice answers remain inside PracticeMode; they are never submitted to the original website. Only a human-verified practice-form definition may be used to start a new practice attempt.
 
 ## Users
 
-### Employee
+- **Learner:** finds approved practice forms, practises safely, uses guidance, saves drafts, and requests help.
+- **Instructor:** responds to authorised assistance requests and reviews progress for assigned learners.
+- **Form Reviewer:** imports supported form schemas, compares the extracted fields with a source reference, and approves or rejects each pending form.
 
-Creates goals, submits project summaries, views suggested skills, responds to evidence requests, and reads final feedback.
+## Sprint 2 reviewer requirements
 
-### Engineering Manager
-
-Reviews direct-report submissions, verifies evidence, makes final feedback decisions, and views confirmed team skill coverage.
-
-## MVP requirements
-
-1. Employee and Manager authentication with role-based access control.
-2. Employee profiles, target roles, and quarterly goals.
-3. Project-summary drafts and submissions.
-4. AI-generated skill suggestions with exact supporting excerpts.
-5. AI-generated feedback draft based only on submitted text.
-6. Manager approval, editing, rejection, and evidence-request actions.
-7. An approval audit history.
-8. A team skill map based only on manager-confirmed skills.
-9. Review status tracking.
+1. Only authenticated Form Reviewers may list the review queue, read a preview, read reviewer notifications, import a form, or make a decision.
+2. The queue exposes the extracted labels, input types, required indicators, validation metadata, and source URL needed for verification.
+3. A successful supported import creates an `AWAITING_REVIEW` practice form and a reviewer notification.
+4. Approval records reviewer identity and timestamp, then changes the form to `APPROVED`.
+5. Rejection requires a non-blank reason, records reviewer identity and timestamp, and changes the form to `REJECTED`.
+6. A form that is no longer awaiting review cannot receive a second decision. The API returns `409` and leaves the saved decision intact.
+7. Invalid imports, including duplicate field positions or learner-answer data, create no published form.
 
 ## Constraints
 
-- No numerical performance score or automated employment decision.
-- No access to private code, messages, or employee monitoring data.
-- No real employee data in development or demonstrations.
-- "Not Demonstrated" refers to missing evidence in the current submission, not the employee's ability.
-
-## Success criteria
-
-- A complete employee-to-manager review can be demonstrated end to end.
-- Every AI skill suggestion contains a verifiable evidence excerpt.
-- Confirmed team skills reflect only manager-approved evidence.
-- Access-control tests prevent cross-team data access.
+- The browser client is not the security boundary; permissions are enforced by Django before protected data is loaded.
+- Staff credentials use bcrypt and session cookies are HttpOnly. HTTPS is required outside local development.
+- PostgreSQL is the deployment database. SQLite is supported only as the local development default.
+- Supported schemas contain structure and validation metadata, never a learner's answers or personal information.

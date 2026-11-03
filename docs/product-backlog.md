@@ -1,43 +1,45 @@
-# SkillLoop Product Backlog
+# PracticeMode Product Backlog
 
-## Sprint 1 — Product foundation
+The backlog reflects the accepted Sprint 1 scope and Sprint 2 design. The 16 MVP stories form the end-to-end practice workflow; stretch and out-of-scope stories are retained to keep prioritisation explicit.
 
-| Priority | Story | Acceptance criteria |
+## MVP
+
+| ID | Persona | Story | Sprint 2 status |
+| --- | --- | --- | --- |
+| US-01 | All roles | Access the role-appropriate workspace securely. | Planned shared authentication |
+| US-02 | Learner | Search approved practice forms by keyword and category. | Planned |
+| US-03 | Learner | Request an instructor assistance session. | Planned |
+| US-04 | Form Reviewer | Inspect awaiting-review forms and extracted field metadata. | Implemented API |
+| US-05 | Instructor | View authorised assistance requests. | Planned |
+| US-08 | Learner | Autosave an unfinished practice attempt. | Planned |
+| US-09 | Learner | View original labels and available translated guidance. | Planned |
+| US-10 | Form Reviewer | Compare an extracted form with its stored source reference. | Implemented API |
+| US-11 | Learner | Edit answers in an approved practice copy. | Planned |
+| US-12 | Learner | Open contextual field hints. | Planned |
+| US-16 | Form Reviewer | Receive a notification when a form awaits review. | Implemented API |
+| US-17 | Form Reviewer | Approve or reject a pending form and record the outcome. | Implemented API |
+| US-18 | Learner | View fictional preparation information. | Planned |
+| US-22 | Instructor | Filter authorised learner progress. | Planned |
+| US-25 | Form Reviewer | Import a supported form schema for human verification. | Implemented API |
+| US-26 | Learner | Complete an attempt and receive validation feedback. | Planned |
+
+## Stretch
+
+| ID | Persona | Story |
 | --- | --- | --- |
-| Must | As the product team, we can reference agreed MVP scope. | Scope, exclusions, user roles, and workflow rules are documented. |
-| Must | As the product team, we can manage work in GitHub. | Repository has a README, issue templates, PR template, and documented branch workflow. |
-| Must | As the product team, we can design the initial workflow. | Wireframes cover employee goal/submission and manager review flows. |
+| US-15 | Learner | View a requested form's preparation or review status. |
+| US-19 | Learner | Compare guided and independent attempts. |
+| US-21 | Learner | Save favourite forms. |
+| US-24 | Form Reviewer | Track learner-reported form issues from investigation to resolution. |
 
-## Sprint 2 — Access and goals
+## Out of scope for the MVP
 
-| Priority | Story | Acceptance criteria |
-| --- | --- | --- |
-| Must | As a user, I can sign in to my role-specific workspace. | Employee and Manager roles receive authorized views only. |
-| Must | As an employee, I can create and update a quarterly goal. | Goal title, description, quarter, and status are saved and displayed. |
+US-06 workshop/session-code creation, US-07 recording playback, US-13 dedicated required-field explanation, US-14 a separate answer-review screen, US-20 alternative layouts, and US-23 instructor private notes.
 
-## Sprint 3 — Project summaries
+## Reviewer acceptance checks
 
-| Priority | Story | Acceptance criteria |
-| --- | --- | --- |
-| Must | As an employee, I can submit a project summary. | Contribution, outcome, and supporting details are validated and saved. |
-| Must | As an employee, I can view past submissions. | Draft and submitted summaries are visible only to their author and manager. |
-
-## Sprint 4 — AI draft
-
-| Priority | Story | Acceptance criteria |
-| --- | --- | --- |
-| Must | As an employee, I receive evidence-linked skill suggestions. | Every skill has a source excerpt; unsupported skills are not presented as confirmed. |
-| Must | As a manager, I can read an AI feedback draft. | Draft is clearly labeled and based only on submission content. |
-
-## Sprint 5 — Manager review
-
-| Priority | Story | Acceptance criteria |
-| --- | --- | --- |
-| Must | As a manager, I can approve, edit, reject, or request evidence. | Actions update status, preserve history, and prevent duplicates. |
-
-## Sprint 6 — Skill map and release
-
-| Priority | Story | Acceptance criteria |
-| --- | --- | --- |
-| Must | As a manager, I can view team skill coverage. | Only confirmed skills are aggregated and filters work. |
-| Must | As the team, we can release the MVP safely. | Test suite, deployment instructions, synthetic demo data, and release checklist are complete. |
+- Queue and preview return no protected review data to a signed-out or non-reviewer caller.
+- An awaiting form exposes its source URL and field labels, types, required flags, and validation metadata.
+- Rejecting a form without a reason fails with `400` and leaves it awaiting review.
+- A decision records the reviewer and timestamp. Repeating it returns `409` and changes nothing.
+- Schema import creates an awaiting-review notification; imports with answer data or duplicate field positions fail with `400`.
