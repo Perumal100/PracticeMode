@@ -202,8 +202,15 @@ class CatalogTests(TestCase):
         self.notification.refresh_from_db()
         self.assertFalse(self.notification.is_read)
 
-    def test_reviewer_workflow_routes_remain_unregistered(self):
+    def test_reviewer_workflow_routes_are_not_shadowed_by_learner_routes(self):
+        # Perumal's reviewer app owns these paths. They are unregistered on this
+        # branch and registered after integration; either way no accounts,
+        # catalog, or attempts view may answer them.
         for url in ("/api/review/forms", "/api/review/notifications", "/api/forms/extractions",
                     f"/api/review/forms/{self.form.pk}", f"/api/review/forms/{self.form.pk}/decision"):
-            with self.subTest(url=url), self.assertRaises(Resolver404):
-                resolve(url)
+            with self.subTest(url=url):
+                try:
+                    match = resolve(url)
+                except Resolver404:
+                    continue
+                self.assertFalse(match.func.__module__.startswith(("accounts.", "catalog.", "attempts.")), match.func)
