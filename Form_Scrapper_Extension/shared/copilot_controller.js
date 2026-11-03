@@ -129,6 +129,13 @@
       discard: () => run('discard'),
       download: () => run('download'),
       preview: () => run('preview'),
+      send: async () => {
+        const response = await run('send');
+        if (response.success) {
+          local.notice = response.value.message;
+          await refresh();
+        }
+      },
       revokeConsent: () => run('revokeConsent', { origin: model?.page.origin }),
       setSetting: async (name, value) => {
         const stored = await readLocal(policy.SETTINGS_KEY, {});

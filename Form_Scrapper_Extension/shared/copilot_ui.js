@@ -171,7 +171,7 @@
     </details>`;
   }
 
-  function controls(state) {
+  function controls(state, settings) {
     const st = state.status;
     const pauseOrResume = st === 'running'
       ? '<button class="pm-btn pm-btn-secondary pm-btn-small" data-action="pause">Pause extraction</button>'
@@ -190,6 +190,14 @@
       <div class="pm-row">
         <button class="pm-btn pm-btn-secondary pm-btn-small" data-action="preview" ${hasSteps ? '' : 'disabled'}>Preview form</button>
         ${discard}
+      </div>
+      <div class="pm-card">
+        <div class="pm-section-title">Import for review</div>
+        <label class="pm-muted">PracticeMode server
+          <input class="pm-input" type="url" data-setting-text="backendUrl" value="${esc(settings.backendUrl)}" spellcheck="false"/></label>
+        <button class="pm-btn pm-btn-primary pm-btn-small" data-action="send" ${hasSteps && st !== 'running' ? '' : 'disabled'}
+          title="Send the captured structure (never answers) to PracticeMode as a form awaiting review">Send to PracticeMode for review</button>
+        <div class="pm-muted">Sign in to PracticeMode as a Form Reviewer in this browser first.</div>
       </div>`;
   }
 
@@ -206,6 +214,8 @@
     root.addEventListener('change', (event) => {
       const input = event.target.closest('[data-setting]');
       if (input) actions.setSetting?.(input.dataset.setting, input.checked);
+      const text = event.target.closest('[data-setting-text]');
+      if (text) actions.setSetting?.(text.dataset.settingText, text.value.trim());
     });
     root.addEventListener('toggle', (event) => {
       if (event.target.dataset?.details === 'warnings') warningsOpen = event.target.open;
@@ -213,6 +223,10 @@
 
     function render(model) {
       lastModel = model;
+      // Re-rendering replaces the markup; wait until the server address is no longer being typed.
+      // getRootNode() is the shadow root for the on-page panel, the document for the popup.
+      const focused = root.getRootNode().activeElement;
+      if (focused && root.contains(focused) && focused.matches('[data-setting-text]')) return;
       const s = model.state;
       const parts = [
         header(model, variant),
@@ -223,9 +237,9 @@
         consentCard(model),
       ];
       if (s) {
-        parts.push(blockerCard(s), progress(s), timeline(s), warnings(s, warningsOpen), controls(s));
+        parts.push(blockerCard(s), progress(s), timeline(s), warnings(s, warningsOpen), controls(s, model.settings));
       } else {
-        parts.push(`<div class="pm-muted">Open a page with a form, then scan one step or extract the whole form. Nothing is sent anywhere except the page itself.</div>`);
+        parts.push(`<div class="pm-muted">Open a page with a form, then scan one step or extract the whole form. Nothing is sent anywhere except the page itself, until you send a capture to PracticeMode for review.</div>`);
       }
       if (variant === 'popup') {
         parts.push(`<div class="pm-footer"><span>Extracts structure only — never your answers.</span>

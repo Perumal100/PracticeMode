@@ -24,6 +24,7 @@
     showLauncher: true,       // on-page copilot launcher on pages with forms
     maxSteps: 25,
     maxValidationRetries: 2,
+    backendUrl: 'http://localhost:8000', // PracticeMode server that receives imports (API-15)
   });
 
   function parse(urlString) {

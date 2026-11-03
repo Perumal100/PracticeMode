@@ -1,6 +1,6 @@
 # PracticeMode Form Extractor (browser extension)
 
-The browser extension from Sprint 2 design decision **DD-03**. It extracts the structure of a multi-step online form so a Form Reviewer can turn it into a PracticeMode practice form (**US-25**, and **API-15** once the backend import endpoint exists).
+The browser extension from Sprint 2 design decision **DD-03**. It extracts the structure of a multi-step online form so a Form Reviewer can turn it into a PracticeMode practice form (**US-25**). A capture can be downloaded as JSON or sent straight to the PracticeMode backend as a form awaiting review (**API-15**).
 
 It works like an application "copilot". The difference is that it never fills a form in for you. It walks the form with **fictional sample data**, records every step's fields, and **stops before final submission**. The result is a single JSON document.
 
@@ -28,6 +28,7 @@ It works like an application "copilot". The difference is that it never fills a 
 | **Pause / Resume / Stop extraction** | Pause keeps the current step; Stop finishes and keeps what was captured. |
 | **Export partial results / Download complete JSON** | Downloads the consolidated JSON. "Complete" is enabled once extraction has finished. |
 | **Preview form** | Renders the extracted structure as a local practice form. |
+| **Send to PracticeMode for review** | Posts the captured structure to the PracticeMode server set in **PracticeMode server** (default `http://localhost:8000`). It becomes a form awaiting review. See [Sending to PracticeMode](#sending-to-practicemode-api-15). |
 | **Discard** | Deletes the temporary extraction state for this tab. |
 
 The panel shows detected steps, captured steps, field count, the current step, a step timeline (including steps not visited and why), warnings, and whether your approval is needed.
@@ -66,8 +67,9 @@ Each concern from the requirements is a separate module (`content/` unless noted
 | `safety_policy.js` | Origin classification, consent, sensitive-field and final-action rules. Shared with the popup and the service worker. |
 | `content_main.js` | The engine: capture → explore → fill → advance per step, loop detection, the manual-intervention watcher, and resume after page loads. |
 | `shared/export_builder.js` | Builds the consolidated JSON. |
+| `shared/import_payload.js` | Converts that JSON into the backend's API-15 import body, keeping only fields and rules PracticeMode can practise and validate. |
 | `shared/copilot_*.js`, `content/copilot_panel.js`, `popup/` | One UI shared by the popup and the on-page panel. |
-| `background/service_worker.js` | Routes commands to the frame holding the form (top page or iframe), injects into tabs opened before install, downloads, preview. |
+| `background/service_worker.js` | Routes commands to the frame holding the form (top page or iframe), injects into tabs opened before install, downloads, preview, and the API-15 import request. |
 
 ### Export format (`practicemode.form-extraction/v1`)
 
@@ -100,13 +102,44 @@ Illustrative interchange format. PracticeMode's own storage and rendering format
 
 URLs are stored without query strings or fragments. Option entries record the page's declared defaults (`defaultSelected`), never the current answer.
 
+## Sending to PracticeMode (API-15)
+
+**Send to PracticeMode for review** calls `POST {server}/api/forms/extractions` on the Django backend (reviewer app, `develop-perumal`). The form is stored as `AWAITING_REVIEW`, a review notification is created, and a Form Reviewer approves or rejects it in the review queue.
+
+Setup:
+
+1. Run the backend with the extension's origin trusted for CSRF. Copy the extension ID from `chrome://extensions`:
+   ```bash
+   DJANGO_CSRF_TRUSTED_ORIGINS=chrome-extension://<extension-id> python manage.py runserver
+   ```
+2. In the same browser profile, sign in to PracticeMode as a user in the `FORM_REVIEWER` group, through `POST /api/login` or `http://localhost:8000/admin/`. The extension sends that session cookie and the `csrftoken` cookie. If no CSRF cookie exists yet, it calls `GET /api/session` first, which sets one.
+3. Capture a form, then press **Send to PracticeMode for review**. The copilot shows how many fields were imported and lists anything left out.
+
+What is sent: `{ title, source_url, source_available: true, fields: [{ position, label, input_type, required, validation }] }`. Only structure is sent, never typed values, placeholders, page defaults or internal option values.
+
+`shared/import_payload.js` adapts the capture to what the backend can practise:
+
+| Captured | Imported as |
+| --- | --- |
+| `text`, `search`, `url` / `email` / `tel` / `textarea`, `richtext` | `text` / `email` / `tel` / `textarea`, keeping `minLength` and `maxLength` |
+| `number`, `range` | `number`, keeping `min` and `max` as numbers |
+| `date` | `date` (date ranges are left out) |
+| `select`, `radio`, `button-group` | `select` with `validation.allowedValues` = the visible option labels, placeholders excluded |
+| single `checkbox` | `checkbox` |
+| conditional follow-up fields | imported as optional, because practice forms show every field |
+| `file`, `password`, checkbox groups, multi-select lists, time and other types | left out and listed in the result |
+
+Rules the backend cannot check yet (`pattern`, `step`, date ranges) are left out and reported. Otherwise an approved form would fail with `422 UNSUPPORTED_FORM_SCHEMA` when a learner starts it. The reviewer compares the imported form with the source page before approving it (US-10).
+
+Errors are explained in the copilot: an unreachable server, `401` (sign in as a Form Reviewer), `403` CSRF (add the extension origin to `DJANGO_CSRF_TRUSTED_ORIGINS`), `403` wrong role, and `400` with the backend's validation message.
+
 ## Tests
 
 ```bash
 npm install
 npm run setup:browsers   # once: downloads the Playwright Chromium build (Chrome no longer loads unpacked extensions from the command line)
 npm test                 # unit + end-to-end
-npm run test:unit        # pure modules: regex sampler, generator, safety policy, export builder
+npm run test:unit        # pure modules: regex sampler, generator, safety policy, export builder, import payload
 npm run test:e2e         # real extension in headless Chromium against tests/fixtures
 ```
 
@@ -118,6 +151,8 @@ The end-to-end suite (`tests/e2e/extraction.spec.mjs`) loads the unpacked extens
 - multi-page forms with full reloads, lazily rendered and virtualised dropdowns, shadow DOM
 
 It also covers the safety rules: no consent means nothing is filled, files are never uploaded to production, assisted mode never stores answers, plus pause/resume and discard. Every fixture's Submit button raises an alert, and the tests assert that no alert ever appears.
+
+`tests/e2e/import.spec.mjs` sends captures to a stand-in PracticeMode server. It checks the request path, the CSRF header and cookie, that the body matches `buildImportPayload`, that no typed value is sent, that unsupported fields are reported, and the signed-out message.
 
 To print one extraction while debugging:
 
@@ -134,4 +169,4 @@ DUMP=1 node tests/tools/extract.mjs test13_multipage_page1.html          # full 
 - **Branches that change later steps** (an answer on step 1 changing step 3) are only recorded along the path actually taken; `navigation[].choicesMade` shows which answers led there.
 - **Validation that only happens after final submission** cannot be discovered, because the extension never submits.
 - **Calendar widgets that ignore typed input** and **drag-and-drop upload zones without a file input** need manual input (the extension pauses and asks).
-- Import into the Django backend (API-15) is not wired yet; the JSON download is the hand-off.
+- **Import (API-15)** sends only what the backend can practise today (see the table above). Hints from help text, file fields, conditional logic and `pattern` rules stay in the JSON download only. The backend does not yet reject a second import of the same source URL (design: `409`), so avoid sending the same capture twice.

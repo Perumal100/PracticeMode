@@ -108,6 +108,7 @@
 .pm-warnings li { font-size: 11.5px; color: #fcd34d; padding-left: 10px; border-left: 2px solid rgba(245,158,11,.4); }
 .pm-section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); font-weight: 600; }
 .pm-muted { color: var(--muted); font-size: 11.5px; }
+.pm-input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid #374151; background: #0b0d12; color: #e5e7eb; font: inherit; font-size: 12px; }
 .pm-footer { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--muted); }
 `;
 })();

@@ -6,6 +6,7 @@
 
 import '../content/safety_policy.js';
 import '../shared/export_builder.js';
+import '../shared/import_payload.js';
 
 const PM = globalThis.PracticeMode;
 const stateKey = (tabId) => `pm_state_${tabId}`;
@@ -105,6 +106,58 @@ async function preview(tabId) {
   return { success: true, value: { tabId: tab.id } };
 }
 
+async function serverUrl() {
+  const key = PM.safetyPolicy.SETTINGS_KEY;
+  const stored = (await chrome.storage.local.get(key))[key] || {};
+  const url = String(stored.backendUrl || PM.safetyPolicy.DEFAULT_SETTINGS.backendUrl).trim();
+  return url.replace(/\/+$/, '');
+}
+
+/** Django's CSRF cookie; GET /api/session sets it if this browser has none yet. */
+async function csrfToken(base) {
+  const read = async () => (await chrome.cookies.get({ url: base, name: 'csrftoken' }))?.value || null;
+  const token = await read();
+  if (token) return token;
+  try {
+    await fetch(`${base}/api/session`, { credentials: 'include' });
+  } catch (_) {
+    return null;
+  }
+  return read();
+}
+
+/** API-15: send the extracted structure to PracticeMode for human review. */
+async function sendToPracticeMode(tabId) {
+  const state = await getState(tabId);
+  const doc = PM.exportBuilder.buildExport(state);
+  if (!doc || !doc.steps.length) return { success: false, error: 'Nothing has been captured yet.' };
+  const { payload, skipped, notes } = PM.importPayload.buildImportPayload(doc);
+  if (!payload.fields.length) {
+    return { success: false, error: 'None of the captured fields can be practised in PracticeMode yet, so nothing was sent.' };
+  }
+
+  const base = await serverUrl();
+  const context = { serverUrl: base, extensionOrigin: `chrome-extension://${chrome.runtime.id}` };
+  const token = await csrfToken(base);
+  let response;
+  try {
+    response = await fetch(`${base}/api/forms/extractions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(token ? { 'X-CSRFToken': token } : {}) },
+      body: JSON.stringify(payload),
+    });
+  } catch (_) {
+    return { success: false, error: PM.importPayload.describeImportError(0, null, context) };
+  }
+  const body = await response.json().catch(() => null);
+  if (response.status !== 201) {
+    return { success: false, error: PM.importPayload.describeImportError(response.status, body, context) };
+  }
+  const result = { formId: body?.id, status: body?.status, fieldCount: payload.fields.length, skipped, notes };
+  return { success: true, value: { ...result, message: PM.importPayload.describeImported(result) } };
+}
+
 async function command(msg, sender = {}) {
   const tabId = msg.tabId ?? sender.tab?.id;
   if (!Number.isInteger(tabId)) return { success: false, error: 'No browser tab was given.' };
@@ -165,6 +218,8 @@ async function command(msg, sender = {}) {
       return download(tabId);
     case 'preview':
       return preview(tabId);
+    case 'send':
+      return sendToPracticeMode(tabId);
     case 'openPanel':
       await ensureInjected(tabId);
       return sendToFrame(tabId, 0, { type: 'PM_PANEL', action: 'open' });

@@ -6,5 +6,6 @@ for (const file of [
   '../../content/regex_sampler.js',
   '../../content/dummy_data_generator.js',
   '../../shared/export_builder.js',
+  '../../shared/import_payload.js',
 ]) require(file);
 export const PM = globalThis.PracticeMode;
