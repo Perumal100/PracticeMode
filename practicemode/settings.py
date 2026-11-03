@@ -1,6 +1,6 @@
 """Settings for the local PracticeMode implementation.
 
-PostgreSQL is the production target. SQLite keeps the reviewer slice easy to run
+PostgreSQL is the production target. SQLite keeps the shared foundation easy to run
 locally and is overridden when DATABASE_URL is supplied by deployment tooling.
 """
 from pathlib import Path
@@ -20,7 +20,10 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "accounts",
     "reviewer",
+    "catalog",
+    "attempts",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
