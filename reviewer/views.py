@@ -13,6 +13,7 @@ from .serializers import (
     NotificationSerializer,
     PracticeFormDetailSerializer,
     PracticeFormQueueSerializer,
+    PracticeFormUpdateSerializer,
 )
 
 
@@ -43,6 +44,43 @@ class ReviewFormDetailView(APIView):
         except PracticeForm.DoesNotExist:
             return Response({"error": "FORM_NOT_FOUND"}, status=status.HTTP_404_NOT_FOUND)
         return Response(PracticeFormDetailSerializer(practice_form).data)
+
+
+    def patch(self, request, form_id):
+        serializer = PracticeFormUpdateSerializer(
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        with transaction.atomic():
+            try:
+                practice_form = PracticeForm.objects.select_for_update().get(
+                    id=form_id
+                )
+            except PracticeForm.DoesNotExist:
+                return Response(
+                    {"error": "FORM_NOT_FOUND"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # Only pending forms may be edited; reviewed versions stay unchanged.
+            if practice_form.status != FormStatus.AWAITING_REVIEW:
+                raise Conflict(
+                    detail="Only forms awaiting review can be edited."
+                )
+
+            for field, value in serializer.validated_data.items():
+                setattr(practice_form, field, value)
+
+            practice_form.save(
+                update_fields=[*serializer.validated_data, "updated_at"]
+            )
+
+            return Response(
+                PracticeFormDetailSerializer(practice_form).data
+            )
+
 
 
 class ReviewDecisionView(APIView):
@@ -101,6 +139,8 @@ class FormExtractionView(APIView):
                 title=payload["title"],
                 source_url=payload["source_url"],
                 source_available=payload["source_available"],
+                # Save validated form categories.
+                categories=payload["categories"],
             )
             FormField.objects.bulk_create([
                 FormField(

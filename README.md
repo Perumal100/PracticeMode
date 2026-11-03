@@ -96,3 +96,67 @@ Use `DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME` to use PostgreSQL
 | `POST` | `/api/forms/extractions` | Import a supported schema for reviewer verification |
 
 The import endpoint accepts schema metadata only. Learner answer values are rejected and are never forwarded to a source site.
+
+## Sprint 3: Form metadata and editing
+
+- Added `categories` and `failure_reason` to `PracticeForm`, with a database migration.
+- Model validation rejects blank or duplicate category labels and requires a reason for `FAILED` forms when `full_clean()` is called.
+- Schema imports accept optional categories, trim surrounding whitespace, and reject blank or duplicate labels.
+- Review queue and detail responses include categories and failure reasons.
+- Reviewers can edit a pending form's title and categories using `PATCH /api/review/forms/{formId}`.
+
+### Editing rules
+
+Only forms with status `AWAITING_REVIEW` can be edited through this endpoint.
+Edits to `APPROVED`, `REJECTED`, or `FAILED` forms return `409 Conflict`.
+
+The endpoint accepts only `title` and `categories`; omitted values remain unchanged.
+Empty requests, invalid values, and attempts to edit other fields return `400`.
+Missing forms return `404`. Reviewer authentication and permissions are required.
+
+Example PATCH request body:
+
+```json
+{
+  "title": "Updated practice form",
+  "categories": ["Housing"]
+}
+```
+
+### Fictional demo data
+
+After installing dependencies and applying migrations, run:
+
+```bash
+python manage.py seed_demo
+```
+
+This creates two fictional forms with fields and review notifications.
+Both start in `AWAITING_REVIEW`. Their source URLs are placeholders, and
+`source_available` is false.
+
+Running the command again skips existing demo forms without changing them.
+No learner answers or user accounts are created.
+
+### Codespaces / Linux setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_demo
+python manage.py test reviewer
+```
+
+The reviewer test suite currently contains 22 passing tests, including model
+validation, category API behavior, partial edits, permissions, and edit-state protection.
+
+### Implementation notes
+
+SQLite is used for local development; PostgreSQL remains the production target.
+Source availability currently uses a boolean rather than the three-state value
+described in Sprint 2. Categories are stored as a JSON list.
+
+Metadata editing currently supports title and categories only. Changes to
+extracted fields, source information, and lifecycle status are outside this endpoint.

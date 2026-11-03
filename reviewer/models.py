@@ -19,6 +19,8 @@ class PracticeForm(models.Model):
     title = models.CharField(max_length=200)
     source_url = models.URLField(max_length=2048)
     source_available = models.BooleanField(default=True)
+    categories = models.JSONField(default=list, blank=True)
+    failure_reason = models.TextField(blank=True)
     status = models.CharField(max_length=32, choices=FormStatus.choices, default=FormStatus.AWAITING_REVIEW)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -28,6 +30,26 @@ class PracticeForm(models.Model):
 
     def __str__(self) -> str:
         return self.title
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        if not isinstance(self.categories, list):
+            errors["categories"] = "Categories must be a list."
+        elif any(
+            not isinstance(category, str) or not category.strip()
+            for category in self.categories
+        ):
+            errors["categories"] = "Categories must contain non-blank text."
+        elif len({category.strip().casefold() for category in self.categories}) != len(self.categories):
+            errors["categories"] = "Categories must not contain duplicates."
+
+        if self.status == FormStatus.FAILED and not self.failure_reason.strip():
+            errors["failure_reason"] = "A failure reason is required."
+
+        if errors:
+            raise ValidationError(errors)    
 
 
 class FormField(models.Model):
