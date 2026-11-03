@@ -6,9 +6,9 @@ PracticeMode is a safe, web-based place for people to practise completing online
 
 ## dev-rohan backend scope
 
-This branch implements staff authentication, partial learner catalog retrieval, and learner-owned attempt creation, retrieval, autosave, and completion. It reuses Perumal's form models and initial migration unchanged from `1f88ea4`. Reviewer workflow routes are intentionally unregistered; no import, approval, or form-management behavior is implemented here. The original README is reused from that branch and updated for this implementation.
+This branch implements staff and learner authentication, learner catalog search with keyword and category filters, and learner-owned attempt creation, retrieval, autosave, and completion. It reuses Perumal's initial form migration unchanged from `1f88ea4`, and `reviewer/models.py` plus `reviewer/migrations/0002_practiceform_categories_failure_reason.py` byte for byte from Atheer's `Dev-Atheer` branch (`30eb43b`) so those files merge cleanly. Reviewer workflow routes are intentionally unregistered; no import, approval, or form-management behavior is implemented here. The original README is reused from that branch and updated for this implementation.
 
-Learner login remains unavailable (`503 LEARNER_IDENTITY_UNAVAILABLE`). Attempt and catalog tests use persisted learner-role session fixtures, not a production learner-login implementation. No alternative identity model is defined, and `AUTH_USER_MODEL` remains unchanged.
+Learners sign in with a display name only. Every learner sign-in creates a new Django user in the `LEARNER` group with the display name as `first_name`, no email, an unusable password, and a generated `learner-<code>` username that is never returned. `AUTH_USER_MODEL` remains Django's default, as on every other branch.
 
 ## Local development
 
@@ -21,7 +21,7 @@ python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-The shared user-model decision is unresolved. Do not migrate an existing database as part of this increment. The commands below use disposable SQLite databases and leave the repository's `db.sqlite3` untouched.
+The commands below use disposable SQLite databases and leave the repository's `db.sqlite3` untouched.
 
 Run an empty local server with existing migrations applied only to a temporary database. Stop it with Ctrl-C; the temporary database is then removed. No forms or user accounts are seeded:
 
@@ -49,7 +49,7 @@ with TemporaryDirectory(prefix="practicemode-dev-") as folder:
 PY
 ```
 
-After the team's identity/migration agreement, normal persistent development uses `.venv/bin/python manage.py migrate` followed by `.venv/bin/python manage.py runserver`. Use `DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DEDICATED_DB` for a dedicated PostgreSQL database. Provision the database separately. Hosted settings require a private `DJANGO_SECRET_KEY`, appropriate `DJANGO_ALLOWED_HOSTS`, `DJANGO_DEBUG=false`, `DJANGO_FORCE_HTTPS=true`, and HTTPS. Session cookies are HttpOnly; session and CSRF cookies are Secure outside debug mode.
+Normal persistent development uses `.venv/bin/python manage.py migrate` followed by `.venv/bin/python manage.py runserver`. Use `DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DEDICATED_DB` for a dedicated PostgreSQL database. Provision the database separately. Hosted settings require a private `DJANGO_SECRET_KEY`, appropriate `DJANGO_ALLOWED_HOSTS`, `DJANGO_DEBUG=false`, `DJANGO_FORCE_HTTPS=true`, and HTTPS. Session cookies are HttpOnly; session and CSRF cookies are Secure outside debug mode.
 
 ## Database-backed tests
 
@@ -91,18 +91,18 @@ Coverage includes real staff sessions and CSRF, learner-role catalog/attempt aut
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/session` | Public CSRF initialization and current user, or `{"user": null}` |
-| `POST` | `/api/login` | Staff username/password login; optional matching role |
+| `POST` | `/api/login` | Staff username/password login, or learner display-name login |
 | `POST` | `/api/logout` | Authenticated, CSRF-protected logout; `204` |
-| `GET` | `/api/forms?keyword=...` | Learner-only approved forms, newest first with ID tie-breaker |
+| `GET` | `/api/forms?keyword=...&category=...` | Learner-only approved forms, newest first with ID tie-breaker |
 | `GET` | `/api/forms/{formId}` | Learner-only approved form and position-ordered fields |
 | `POST` | `/api/attempts` | Learner-only creation; `201` with the new attempt |
 | `GET` | `/api/attempts/{attemptId}` | Owner-only attempt and saved answers |
 | `PATCH` | `/api/attempts/{attemptId}/answers/{fieldId}` | Owner-only draft save; `200` only after persistence |
 | `POST` | `/api/attempts/{attemptId}/completion` | Owner-only completion with stored feedback |
 
-Paths have no trailing slash. Unsafe requests require the session cookies and `X-CSRFToken` header, including anonymous login. Initialize cookies with `GET /api/session`; login rotates CSRF, so reread the cookie afterward. Staff login accepts `{"username":"...","password":"...","role":"INSTRUCTOR"}` (role is optional). It returns `{"user":{"id":"...","displayName":"...","role":"INSTRUCTOR"}}`; exactly one recognized role group is required. A public signed-out session response is `200`, while protected endpoints return `401`. Wrong role/ownership returns `403` without protected data. Reviewers cannot read learner answers.
+Paths have no trailing slash. Unsafe requests require the session cookies and `X-CSRFToken` header, including anonymous login. Initialize cookies with `GET /api/session`; login rotates CSRF, so reread the cookie afterward. Staff login accepts `{"username":"...","password":"...","role":"INSTRUCTOR"}` (role is optional). It returns `{"user":{"id":"...","displayName":"...","role":"INSTRUCTOR"}}`; exactly one recognized role group is required. Learner login accepts `{"role":"LEARNER","displayName":"Alex"}` and returns the same shape with role `LEARNER`; a storage failure returns `503 LEARNER_IDENTITY_UNAVAILABLE` without a session. A public signed-out session response is `200`, while protected endpoints return `401`. Wrong role/ownership returns `403` without protected data. Reviewers cannot read learner answers.
 
-Catalog list is a plain array of `{id, title, status}`; detail adds `fields: [{id, position, label, input_type, required, validation}]`. Empty results are `[]`. Blank/repeated/oversized keyword values and unknown filters return `400`. Categories are not supported. Missing forms return `404`; unapproved details return `403 FORM_NOT_APPROVED`. Reviewer/source metadata and unavailable guidance/options are omitted.
+Catalog list is a plain array of `{id, title, status, categories}`; detail adds `fields: [{id, position, label, input_type, required, validation}]`. Empty results are `[]`. `category` may be repeated up to 10 times (`?category=Housing&category=Education`); a form matches when it has any selected category, ignoring case, and keyword and category filters combine. Blank/repeated/oversized keyword values, blank or oversized categories, and unknown filters return `400`. Missing forms return `404`; unapproved details return `403 FORM_NOT_APPROVED`. Reviewer/source metadata and unavailable guidance/options are omitted.
 
 Attempt creation accepts `{"formId":"<uuid>"}`. Optional `displayName` is accepted for the documented input contract but never selects, creates, or updates an identity; the authenticated session supplies ownership. Creation requires an approved form and creates exactly one progress record in the same transaction.
 
@@ -136,11 +136,11 @@ The implementation reads the existing `FormField.required`, `input_type`, and `v
 - `allowedValues`: an explicit nonempty, unique string list for select fields. No options are inferred. A select with no stored `allowedValues` is unsupported for starting an attempt.
 - Unknown rule keys, invalid parameters/ranges, unsupported field types (including file/radio), and missing select choices return `422 UNSUPPORTED_FORM_SCHEMA` with field/rule details. This check runs on creation, on the saved field during autosave, and across the form at completion. Unsupported rules are not silently treated as successful validation. Regex `pattern` rules are currently unsupported.
 
-There is no learner identity creation, file upload, category filtering, guidance/translation/checklist model, assistance workflow, instructor progress dashboard, or hint-opening tracking in this branch. The approved-form list can supply the learner dashboard's available-forms section. Reviewer dashboard APIs remain Perumal's integration dependency. Progress hint counts start at zero and are not fabricated.
+There is no file upload, guidance/translation/checklist model, assistance workflow, instructor progress dashboard, or hint-opening tracking in this branch. The approved-form list can supply the learner dashboard's available-forms section. Reviewer dashboard APIs remain Perumal's integration dependency. Progress hint counts start at zero and are not fabricated.
 
 ## Proposed shared models and migration agreement
 
-`attempts.0001_initial` depends on `reviewer.0001_initial` and the swappable user model. These are proposed real shared models; compatibility with Atheer's eventual schema/migrations has not been established.
+`attempts.0001_initial` depends on `reviewer.0001_initial` and the swappable user model. It does not touch Atheer's `reviewer.0002`, so the two migrate in either order.
 
 - `Attempt`: UUID ID, protected learner FK (`settings.AUTH_USER_MODEL`, related name `practice_attempts`), protected form FK (`reviewer.PracticeForm`, related name `attempts`), `IN_PROGRESS`/`COMPLETED` status, start/save/completion timestamps, JSON feedback list. Database checks enforce valid status, completion timestamp consistency, and save/completion times not preceding start.
 - `Answer`: UUID ID, attempt FK (`CASCADE`, related name `answers`), protected field FK (`reviewer.FormField`, related name `practice_answers`), nullable JSON value, update timestamp; unique `(attempt, field)`.
@@ -148,4 +148,4 @@ There is no learner identity creation, file upload, category filtering, guidance
 
 Role/ownership, field-to-form consistency, and completed-attempt immutability are enforced by API permissions and transactional services, not by cross-table SQL checks. Other modules must preserve these invariants when writing directly. Form definitions/fields must not be structurally changed underneath existing attempts; publish a new form record for such changes. Form-status changes block new attempts but do not remove an existing owner's saved work.
 
-Compare app/model/field names, related names, constraints, user-key types, deletion rules, validation metadata, and migration ancestry with Atheer before integration. Runtime model access and swappable foreign keys do not make changing `AUTH_USER_MODEL` after migrations automatic. Coordinate any user-model replacement before applying this proposed schema to a shared or existing database.
+Runtime model access and swappable foreign keys do not make changing `AUTH_USER_MODEL` after migrations automatic. Coordinate any user-model replacement before applying this schema to a shared or existing database.
