@@ -8,7 +8,7 @@ class IdentityUnavailable(APIException):
     status_code = 503
     default_detail = {
         "error": "LEARNER_IDENTITY_UNAVAILABLE",
-        "message": "Learner access is unavailable until the learner identity model is integrated.",
+        "message": "Learner access could not be started. Please retry.",
     }
 
 

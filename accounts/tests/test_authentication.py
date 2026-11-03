@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib.auth import SESSION_KEY, get_user_model
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import Group
+from django.db import DatabaseError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import include, path
 from rest_framework.permissions import IsAuthenticated
@@ -60,10 +61,6 @@ class IdentityBoundaryTests(SimpleTestCase):
         for roles in ([], ["LEARNER", "FORM_REVIEWER"]):
             user.groups.filter.return_value.values_list.return_value = roles
             self.assertIsNone(identity.role_for(user))
-
-    def test_learner_creation_is_explicitly_unavailable(self):
-        with self.assertRaises(identity.LearnerIdentityUnavailable):
-            identity.create_learner("Alex")
 
     def test_login_rejects_invalid_payloads(self):
         for payload in (
@@ -173,14 +170,43 @@ class SessionAuthenticationTests(TestCase):
         self.assertEqual(self.login().status_code, 403)
         self.assertNotIn(SESSION_KEY, self.client.session)
 
-    def test_valid_learner_request_creates_no_identity_or_session(self):
+    def learner_login(self, display_name="Alex"):
+        return self.client.post("/api/login", {"role": "LEARNER", "displayName": display_name},
+            format="json", HTTP_X_CSRFTOKEN=self.csrf())
+
+    def test_learner_display_name_login_creates_a_private_learner_session(self):
+        response = self.learner_login("  Alex  ")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.data["user"]), {"id", "displayName", "role"})
+        self.assertEqual(response.data["user"]["displayName"], "Alex")
+        self.assertEqual(response.data["user"]["role"], "LEARNER")
+        learner = get_user_model()._default_manager.get(pk=response.data["user"]["id"])
+        self.assertEqual(self.client.session[SESSION_KEY], str(learner.pk))
+        # Privacy NFR: a display name only; no email or password hash is stored.
+        self.assertFalse(learner.has_usable_password())
+        self.assertEqual(learner.email, "")
+        self.assertEqual(identity.role_for(learner), identity.LEARNER)
+        self.assertNotIn(learner.get_username(), str(response.data))
+        self.assertEqual(self.client.get("/api/session").data, response.data)
+
+    def test_learners_with_the_same_display_name_get_distinct_identities(self):
+        first = self.learner_login().data["user"]["id"]
+        self.client = APIClient(enforce_csrf_checks=True)
+        second = self.learner_login().data["user"]["id"]
+        self.assertNotEqual(first, second)
+        self.assertEqual(Group.objects.get(name=identity.LEARNER).user_set.count(), 2)
+
+    def test_learner_session_cannot_use_staff_routes(self):
+        self.learner_login()
+        self.assertEqual(self.client.get("/test/instructor").status_code, 403)
+
+    def test_learner_storage_failure_is_503_without_identity_or_session(self):
         model = get_user_model()
         before = model._default_manager.count()
-        for _ in range(2):
-            response = self.client.post("/api/login", {"role": "LEARNER", "displayName": "Alex"},
-                format="json", HTTP_X_CSRFTOKEN=self.csrf())
-            self.assertEqual(response.status_code, 503)
-            self.assertEqual(response.data["error"], "LEARNER_IDENTITY_UNAVAILABLE")
+        with patch("accounts.identity.Group.objects.get_or_create", side_effect=DatabaseError):
+            response = self.learner_login()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["error"], "LEARNER_IDENTITY_UNAVAILABLE")
         self.assertEqual(model._default_manager.count(), before)
         self.assertNotIn(SESSION_KEY, self.client.session)
 

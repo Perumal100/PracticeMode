@@ -19,8 +19,8 @@ class CatalogTests(TestCase):
     def setUpTestData(cls):
         model = get_user_model()
         cls.users = {}
-        # Session fixtures exercise authorization while production learner
-        # identity creation remains unavailable. No alternate model is defined.
+        # Session fixtures exercise authorization; learner sign-in itself is
+        # covered by accounts.tests.
         for role in ("LEARNER", "INSTRUCTOR", "FORM_REVIEWER"):
             user = model._default_manager.create_user(**{model.USERNAME_FIELD: role.lower()})
             user.groups.add(Group.objects.create(name=role))

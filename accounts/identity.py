@@ -1,5 +1,9 @@
 """User-model integration points; no identity schema is owned by this module."""
+import secrets
+
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.db import DatabaseError, transaction
 
 LEARNER = "LEARNER"
 INSTRUCTOR = "INSTRUCTOR"
@@ -8,7 +12,7 @@ ROLES = (LEARNER, INSTRUCTOR, FORM_REVIEWER)
 
 
 class LearnerIdentityUnavailable(Exception):
-    """Learner persistence must be supplied with the agreed user-model contract."""
+    """The learner identity could not be stored."""
 
 
 def staff_credentials(username, password):
@@ -33,5 +37,19 @@ def user_details(user, role):
 
 
 def create_learner(display_name):
-    # Do not match an existing learner by name or invent a temporary schema.
-    raise LearnerIdentityUnavailable
+    # Every sign-in creates a new learner; never match an existing one by name.
+    # The team shares Django's default user model and role groups, so a learner
+    # is a user with the display name, no email and no usable password. The
+    # generated username is the non-personal short code from Sprint 2 that
+    # tells learners with the same display name apart.
+    model = get_user_model()
+    try:
+        with transaction.atomic():
+            user = model._default_manager.create_user(**{
+                model.USERNAME_FIELD: f"learner-{secrets.token_hex(6)}",
+                "first_name": display_name,
+            })
+            user.groups.add(Group.objects.get_or_create(name=LEARNER)[0])
+    except DatabaseError:
+        raise LearnerIdentityUnavailable from None
+    return user
