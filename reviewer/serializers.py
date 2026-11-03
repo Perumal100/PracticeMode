@@ -169,8 +169,14 @@ class NotificationSerializer(serializers.ModelSerializer):
         fields = ("id", "form_id", "form_title", "created_at", "is_read")
 
 # Validate title/category edits while blocking changes to review status and other fields.
+EDITABLE_FORM_KEYS = {"title", "categories", "source_url", "source_available"}
+
+
 class PracticeFormUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200, trim_whitespace=True)
+    # Reviewers correct the source when extraction recorded the wrong page (US-10).
+    source_url = serializers.URLField(max_length=2048, required=False)
+    source_available = serializers.BooleanField(required=False)
     categories = serializers.ListField(
         child=serializers.CharField(
             max_length=100,
@@ -190,7 +196,7 @@ class PracticeFormUpdateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         # Editing metadata must not change review status or extracted fields.
-        unknown_fields = set(self.initial_data) - {"title", "categories"}
+        unknown_fields = set(self.initial_data) - EDITABLE_FORM_KEYS
         if unknown_fields:
             raise serializers.ValidationError({
                 field: "This field cannot be edited here."
@@ -201,3 +207,35 @@ class PracticeFormUpdateSerializer(serializers.Serializer):
                 "Provide at least one field to update."
             )
         return attrs
+
+
+EDITABLE_FIELD_KEYS = {"label", "input_type", "required", "validation"}
+
+
+def validate_field_edit(data, current=None, position=0):
+    """Validate a reviewer's new or changed field with the import rules.
+
+    `current` is the stored field for an edit; omitted keys keep its values.
+    Returns validated data without the position.
+    """
+    if not isinstance(data, dict):
+        raise serializers.ValidationError("Send the field as an object.")
+    unknown = set(data) - EDITABLE_FIELD_KEYS
+    if unknown:
+        raise serializers.ValidationError({key: "This field cannot be edited here." for key in sorted(unknown)})
+    if current is not None and not data:
+        raise serializers.ValidationError("Provide at least one field to update.")
+    merged = {} if current is None else {
+        "label": current.label, "input_type": current.input_type,
+        "required": current.required, "validation": current.validation,
+    }
+    merged.update(data)
+    checked = ExtractionFieldSerializer(data={**merged, "position": position})
+    checked.is_valid(raise_exception=True)
+    result = dict(checked.validated_data)
+    result.pop("position")
+    return result
+
+
+class FieldOrderSerializer(serializers.Serializer):
+    fieldIds = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)

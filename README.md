@@ -134,7 +134,11 @@ Completion accepts no body. Policy A follows DD-05/API-16: the first successful 
 | --- | --- | --- |
 | `GET` | `/api/review/forms?status=` | Forms by status (default `AWAITING_REVIEW`) |
 | `GET` | `/api/review/forms/{formId}` | Extracted fields, validation, source reference and decision |
-| `PATCH` | `/api/review/forms/{formId}` | Edit a pending form's title or categories |
+| `PATCH` | `/api/review/forms/{formId}` | Correct a pending form's title, categories, source URL or source availability |
+| `POST` | `/api/review/forms/{formId}/fields` | Add a field the extraction missed |
+| `PATCH` | `/api/review/forms/{formId}/fields/{fieldId}` | Correct a field's label, type, required flag or validation |
+| `DELETE` | `/api/review/forms/{formId}/fields/{fieldId}` | Remove a field the source does not have (at least one must remain) |
+| `PUT` | `/api/review/forms/{formId}/fields/order` | `{"fieldIds": [...]}` puts the fields in the source's order |
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
 | `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
 | `POST` | `/api/forms/extractions` | Import an extracted form for review (used by the browser extension) |
@@ -150,22 +154,16 @@ Only Form Reviewers can call these. A form can be decided only once; a repeat re
 
 The import endpoint accepts structure only: `{title, source_url, source_available, categories?, fields: [{position, label, input_type, required, validation}]}`. Payloads that carry learner answers are rejected. Each field's `validation` may hold only the rules the attempt module can check, listed below; anything else returns `400`. A second import of a source that is still awaiting review returns `409 DUPLICATE_PENDING_IMPORT`.
 
-#### Editing a pending form (`PATCH /api/review/forms/{formId}`)
+#### Correcting a pending form
 
-Only forms with status `AWAITING_REVIEW` can be edited through this endpoint.
-Edits to `APPROVED`, `REJECTED`, or `FAILED` forms return `409 Conflict`.
+While a form is `AWAITING_REVIEW`, a reviewer can fix what extraction got wrong before deciding. Every change is re-checked with the import rules, so an edited form can still be practised. After the decision the form is locked, and every edit returns `409 Conflict`.
 
-The endpoint accepts only `title` and `categories`; omitted values remain unchanged.
-Empty requests, invalid values, and attempts to edit other fields return `400`.
-Missing forms return `404`. Reviewer authentication and permissions are required.
-
-Example PATCH request body:
+- **Form details** (`PATCH /api/review/forms/{formId}`) accept only `title`, `categories`, `source_url` and `source_available`; omitted values stay unchanged. Status, failure reason and fields cannot be changed here (`400`).
+- **Fields** are added, changed, removed and reordered through the `/fields` routes above. A field takes `label`, `input_type`, `required` and `validation`; any other key returns `400`. Positions are renumbered 1..n after a removal or a reorder.
 
 ```json
-{
-  "title": "Updated practice form",
-  "categories": ["Housing"]
-}
+PATCH /api/review/forms/{formId}
+{ "title": "Senior Software Engineer", "source_url": "https://careers.datadoghq.com/detail/8052118/?gh_jid=8052118" }
 ```
 
 ## Validation rules and limitations

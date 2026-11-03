@@ -1,6 +1,7 @@
-// US-04 inspect extracted fields, US-10 compare with the source, US-17 approve
-// or reject. Title and category edits use Dev-Atheer's PATCH endpoint.
-import { AlertCircle, AlertTriangle, Check, ExternalLink, Gavel, Loader2, Tag, X } from 'lucide-react';
+// US-04 inspect extracted fields, US-10 compare with the source and correct
+// what extraction got wrong, US-17 approve or reject. Corrections are allowed
+// only while the form awaits review.
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowUp, Check, ExternalLink, Gavel, Loader2, Pencil, Plus, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -12,16 +13,74 @@ import {
 import { Badge, StatusBadge } from '@/components/ui/badge.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card.jsx';
-import { Input, Label, Textarea } from '@/components/ui/input.jsx';
+import { Checkbox, Input, Label, Textarea } from '@/components/ui/input.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table.jsx';
 import { formatDateTime, hostOf, timeAgo } from '@/lib/format';
 import {
+  addField as defaultAddField,
   decideForm as defaultDecideForm,
+  deleteField as defaultDeleteField,
   getReviewForm as defaultGetReviewForm,
+  reorderFields as defaultReorderFields,
+  updateField as defaultUpdateField,
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
+import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
 import { reviewErrorMessage } from './ReviewQueue.jsx';
+
+const TYPE_LABEL = Object.fromEntries(FIELD_TYPES);
+
+function DetailsEditor({ data, onSave, onCancel }) {
+  const [title, setTitle] = useState(data.title);
+  const [sourceUrl, setSourceUrl] = useState(data.source_url);
+  const [available, setAvailable] = useState(data.source_available);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!title.trim()) return setError('Enter a title.');
+    try {
+      const url = new URL(sourceUrl.trim());
+      if (!/^https?:$/.test(url.protocol)) throw new Error('scheme');
+    } catch {
+      return setError('Enter the full address of the source page, starting with https://.');
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onSave({ title: title.trim(), source_url: sourceUrl.trim(), source_available: available });
+    } catch (err) {
+      setError(apiErrorMessage(err, 'The details could not be saved.'));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="space-y-4">
+      <div className="grid gap-2">
+        <Label htmlFor="form-title">Title</Label>
+        <Input id="form-title" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
+        <p className="text-xs text-muted-foreground">Learners see this name in the catalog.</p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="form-source">Source page</Label>
+        <Input id="form-source" type="url" value={sourceUrl} maxLength={2048} onChange={(e) => setSourceUrl(e.target.value)} />
+        <p className="text-xs text-muted-foreground">The page where the real form lives, e.g. the job posting rather than an embedded frame.</p>
+      </div>
+      <label htmlFor="form-source-available" className="flex items-center gap-2.5 text-sm">
+        <Checkbox id="form-source-available" checked={available} onChange={(e) => setAvailable(e.target.checked)} className="mt-0" />
+        I opened this source and it loads
+      </label>
+      {error && <Alert variant="destructive"><AlertCircle />{error}</Alert>}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={busy}>{busy && <Loader2 className="animate-spin" />}Save details</Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+      </div>
+    </form>
+  );
+}
 
 export function describeRules(validation = {}) {
   const parts = [];
@@ -91,7 +150,15 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
   const getReviewForm = api.getReviewForm ?? defaultGetReviewForm;
   const decideForm = api.decideForm ?? defaultDecideForm;
   const updateFormMetadata = api.updateFormMetadata ?? defaultUpdateFormMetadata;
+  const addField = api.addField ?? defaultAddField;
+  const updateField = api.updateField ?? defaultUpdateField;
+  const deleteField = api.deleteField ?? defaultDeleteField;
+  const reorderFields = api.reorderFields ?? defaultReorderFields;
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [fieldEditor, setFieldEditor] = useState({ open: false, field: null });
+  const [toDelete, setToDelete] = useState(null);
+  const [moving, setMoving] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState(null);
   const [error, setError] = useState(null);
@@ -144,6 +211,46 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
     }
   }
 
+  async function saveDetails(changes) {
+    const data = await updateFormMetadata(formId, changes);
+    setForm({ state: 'ready', data, error: null });
+    setEditingDetails(false);
+    toast.success('Details saved.');
+  }
+
+  async function saveField(payload) {
+    const data = fieldEditor.field ? await updateField(formId, fieldEditor.field.id, payload) : await addField(formId, payload);
+    setForm({ state: 'ready', data, error: null });
+    toast.success(fieldEditor.field ? 'Field saved.' : 'Field added.');
+  }
+
+  async function removeField(field) {
+    setToDelete(null);
+    setError(null);
+    try {
+      const data = await deleteField(formId, field.id);
+      setForm({ state: 'ready', data, error: null });
+      toast.success(`Removed "${field.label}".`);
+    } catch (err) {
+      setError(apiErrorMessage(err, 'The field could not be removed.'));
+    }
+  }
+
+  async function move(index, step) {
+    const ids = form.data.fields.map((f) => f.id);
+    [ids[index], ids[index + step]] = [ids[index + step], ids[index]];
+    setMoving(true);
+    setError(null);
+    try {
+      const data = await reorderFields(formId, ids);
+      setForm({ state: 'ready', data, error: null });
+    } catch (err) {
+      setError(apiErrorMessage(err, 'The fields could not be reordered.'));
+    } finally {
+      setMoving(false);
+    }
+  }
+
   const crumbs = [{ label: 'Form review', onClick: onBack }];
   if (form.state === 'loading') {
     return (
@@ -179,11 +286,20 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Source</CardTitle>
-              <CardDescription>Open the original page next to this one and compare every field.</CardDescription>
+            <CardHeader className="flex-row items-start justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle>Source</CardTitle>
+                <CardDescription>Open the original page next to this one and compare every field.</CardDescription>
+              </div>
+              {pending && !editingDetails && (
+                <Button variant="outline" size="sm" onClick={() => setEditingDetails(true)}><Pencil />Edit details</Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-3">
+              {editingDetails ? (
+                <DetailsEditor data={data} onSave={saveDetails} onCancel={() => setEditingDetails(false)} />
+              ) : (
+              <>
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/40 px-3 py-2.5">
                 <a href={data.source_url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-sm font-medium text-primary hover:underline">{data.source_url}</a>
                 <Button asChild variant="outline" size="sm">
@@ -199,13 +315,18 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
                   </div>
                 </Alert>
               )}
+              </>
+              )}
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Extracted fields</CardTitle>
-              <CardDescription>Labels, input types, required flags and validation exactly as learners will get them.</CardDescription>
+            <CardHeader className="flex-row items-start justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle>Extracted fields</CardTitle>
+                <CardDescription>Labels, input types, required flags and validation exactly as learners will get them.{pending && ' Correct anything that differs from the source.'}</CardDescription>
+              </div>
+              {pending && <Button variant="outline" size="sm" onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
             </CardHeader>
             <Table>
               <caption className="sr-only">Extracted fields</caption>
@@ -216,16 +337,27 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
                   <TableHead>Type</TableHead>
                   <TableHead>Required</TableHead>
                   <TableHead>Validation</TableHead>
+                  {pending && <TableHead><span className="sr-only">Actions</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.fields.map((field) => (
+                {data.fields.map((field, index) => (
                   <TableRow key={field.id}>
                     <TableCell className="tabular-nums text-muted-foreground">{field.position}</TableCell>
                     <TableCell className="font-medium">{field.label}</TableCell>
-                    <TableCell><Badge variant="outline" className="font-mono text-[11px]">{field.input_type}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="whitespace-nowrap">{TYPE_LABEL[field.input_type] ?? field.input_type}</Badge></TableCell>
                     <TableCell>{field.required ? <span className="inline-flex items-center gap-1 text-sm"><Check className="size-3.5 text-success" />Yes</span> : <span className="text-sm text-muted-foreground">No</span>}</TableCell>
                     <TableCell className="max-w-72 text-[13px] text-muted-foreground">{describeRules(field.validation)}</TableCell>
+                    {pending && (
+                      <TableCell className="whitespace-nowrap text-right">
+                        <div className="inline-flex items-center gap-0.5">
+                          <Button variant="ghost" size="icon" className="size-8" disabled={moving || index === 0} onClick={() => move(index, -1)} aria-label={`Move ${field.label} up`}><ArrowUp /></Button>
+                          <Button variant="ghost" size="icon" className="size-8" disabled={moving || index === data.fields.length - 1} onClick={() => move(index, 1)} aria-label={`Move ${field.label} down`}><ArrowDown /></Button>
+                          <Button variant="ghost" size="icon" className="size-8" onClick={() => setFieldEditor({ open: true, field })} aria-label={`Edit ${field.label}`}><Pencil /></Button>
+                          <Button variant="ghost" size="icon" className="size-8 text-destructive hover:bg-destructive-soft" disabled={data.fields.length === 1} onClick={() => setToDelete(field)} aria-label={`Remove ${field.label}`}><Trash2 /></Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>
@@ -294,6 +426,21 @@ export default function ReviewDetail({ formId, onBack, api = {} }) {
           </Card>
         </div>
       </div>
+
+      <FieldEditor open={fieldEditor.open} field={fieldEditor.field} onOpenChange={(open) => setFieldEditor((f) => ({ ...f, open }))} onSave={saveField} />
+
+      <AlertDialog open={toDelete !== null} onOpenChange={(open) => !open && setToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove “{toDelete?.label}”?</AlertDialogTitle>
+            <AlertDialogDescription>Remove a field only when the source page does not ask for it. The remaining fields are renumbered.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep field</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => removeField(toDelete)}>Remove field</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
         <AlertDialogContent>

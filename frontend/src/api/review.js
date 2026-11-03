@@ -21,3 +21,20 @@ export function updateFormMetadata(formId, changes) {
 export function listNotifications() {
   return apiRequest('/api/review/notifications');
 }
+
+// Corrections before the decision (pending forms only).
+export function addField(formId, field) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/fields`, { method: 'POST', body: field });
+}
+
+export function updateField(formId, fieldId, changes) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/fields/${encodeURIComponent(fieldId)}`, { method: 'PATCH', body: changes });
+}
+
+export function deleteField(formId, fieldId) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/fields/${encodeURIComponent(fieldId)}`, { method: 'DELETE' });
+}
+
+export function reorderFields(formId, fieldIds) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/fields/order`, { method: 'PUT', body: { fieldIds } });
+}
