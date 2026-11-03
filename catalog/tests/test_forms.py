@@ -27,17 +27,17 @@ class CatalogTests(TestCase):
             cls.users[role] = user
         cls.form = PracticeForm.objects.create(
             id=uuid.UUID(int=1), title="Housing application", status=FormStatus.APPROVED,
-            source_url="https://private-source.example/housing",
+            source_url="https://private-source.example/housing", categories=["Housing", "Government"],
         )
         cls.other = PracticeForm.objects.create(
             id=uuid.UUID(int=2), title="Employment application", status=FormStatus.APPROVED,
-            source_url="https://private-source.example/employment",
+            source_url="https://private-source.example/employment", categories=["Employment"],
         )
         cls.unapproved = []
         for status in (FormStatus.AWAITING_REVIEW, FormStatus.REJECTED, FormStatus.FAILED):
             cls.unapproved.append(PracticeForm.objects.create(
                 title="Private housing " + status, status=status,
-                source_url="https://private-source.example/unapproved",
+                source_url="https://private-source.example/unapproved", categories=["Housing"],
             ))
         # Insert out of order to test the model's position ordering.
         cls.last_field = FormField.objects.create(
@@ -62,7 +62,7 @@ class CatalogTests(TestCase):
 
     def test_shared_migration_is_applied_to_the_test_database(self):
         self.assertTrue(MigrationRecorder(connection).migration_qs.filter(
-            app="reviewer", name="0001_initial",
+            app="reviewer", name="0002_practiceform_categories_failure_reason",
         ).exists())
 
     def test_list_contains_only_approved_forms_and_minimal_fields(self):
@@ -70,7 +70,7 @@ class CatalogTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual({row["id"] for row in response.json()}, {str(self.form.pk), str(self.other.pk)})
         for row in response.json():
-            self.assertEqual(set(row), {"id", "title", "status"})
+            self.assertEqual(set(row), {"id", "title", "status", "categories"})
             self.assertEqual(row["status"], "APPROVED")
 
     def test_list_orders_newest_first_and_breaks_timestamp_ties_by_id(self):
@@ -89,6 +89,7 @@ class CatalogTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [{
             "id": str(self.form.pk), "title": "Housing application", "status": "APPROVED",
+            "categories": ["Housing", "Government"],
         }])
 
     def test_empty_search_result_is_an_empty_array(self):
@@ -103,19 +104,42 @@ class CatalogTests(TestCase):
     def test_invalid_or_unimplemented_filters_are_rejected(self):
         for query in (
             "keyword=", "keyword=%20%20", "keyword=" + "x" * 201,
-            "keyword=housing&keyword=employment", "category=housing", "categories=housing",
-            "status=AWAITING_REVIEW", "page=2", "unknown=value", "keyword=housing&category=jobs",
+            "keyword=housing&keyword=employment", "categories=housing",
+            "status=AWAITING_REVIEW", "page=2", "unknown=value", "category=", "category=%20%20",
+            "category=Housing&category=", "category=" + "x" * 101,
+            "&".join(f"category=c{i}" for i in range(11)),
         ):
             with self.subTest(query=query):
                 response = self.client.get("/api/forms?" + query)
                 self.assertEqual(response.status_code, 400)
                 self.assertNotIn("Housing application", str(response.data))
 
+    def test_category_filters_match_any_selected_category_ignoring_case(self):
+        ids = lambda response: [row["id"] for row in response.json()]
+        self.assertEqual(ids(self.client.get("/api/forms", {"category": "housing"})), [str(self.form.pk)])
+        both = self.client.get("/api/forms", {"category": ["  HOUSING ", "employment"]})
+        self.assertEqual(both.status_code, 200)
+        self.assertEqual(set(ids(both)), {str(self.form.pk), str(self.other.pk)})
+        # Unapproved forms in the same category never appear.
+        self.assertNotIn("Private housing", str(both.json()))
+
+    def test_keyword_and_category_filters_combine(self):
+        response = self.client.get("/api/forms", {"keyword": "application", "category": "Employment"})
+        self.assertEqual([row["id"] for row in response.json()], [str(self.other.pk)])
+        response = self.client.get("/api/forms", {"keyword": "housing", "category": "Employment"})
+        self.assertEqual(response.json(), [])
+
+    def test_unknown_category_returns_an_empty_array(self):
+        response = self.client.get("/api/forms", {"category": "Taxes"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
+
     def test_detail_returns_stored_values_and_ordered_fields_without_review_metadata(self):
         response = self.client.get(self.detail_url())
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {
             "id": str(self.form.pk), "title": "Housing application", "status": "APPROVED",
+            "categories": ["Housing", "Government"],
             "fields": [
                 {"id": str(self.first_field.pk), "position": 1, "label": "Fictional name",
                  "input_type": "text", "required": True, "validation": {"maxLength": 60}},
