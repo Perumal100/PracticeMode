@@ -7,7 +7,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8000',
+      // changeOrigin stays false: the string shorthand rewrites Host to
+      // localhost:8000 while the browser still sends Origin localhost:5173,
+      // and Django's CSRF origin check then rejects every POST and PATCH.
+      '/api': { target: 'http://localhost:8000', changeOrigin: false },
     },
   },
   test: {
