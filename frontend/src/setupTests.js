@@ -14,3 +14,11 @@ if (typeof window.localStorage?.getItem !== 'function') {
   };
   Object.defineProperty(window, 'localStorage', { value: storage, configurable: true });
 }
+
+// jsdom has no matchMedia; the toast container queries it.
+if (!window.matchMedia) {
+  window.matchMedia = (query) => ({
+    matches: false, media: query, onchange: null,
+    addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
+  });
+}

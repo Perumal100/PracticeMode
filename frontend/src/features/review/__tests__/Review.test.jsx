@@ -1,5 +1,5 @@
 // US-04, US-10, US-16 and US-17 reviewer screens. The API is a test double.
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client.js';
 import ReviewDetail, { describeRules } from '../ReviewDetail.jsx';
@@ -22,11 +22,11 @@ describe('ReviewQueue', () => {
       listNotifications: vi.fn().mockResolvedValue([{ id: 'n1', form_id: 'f1', form_title: 'Job Application Form', created_at: pending.created_at, is_read: false }]),
     };
     render(<ReviewQueue onOpen={onOpen} api={api} />);
-    expect(await screen.findByText('1 new form awaiting review')).toBeInTheDocument();
+    const notices = await screen.findByRole('status', { name: '1 new form awaiting review' });
     expect(api.listReviewForms).toHaveBeenCalledWith('AWAITING_REVIEW');
-    fireEvent.click(screen.getByRole('button', { name: 'Inspect' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Inspect Job Application Form' }));
     expect(onOpen).toHaveBeenCalledWith('f1');
-    fireEvent.click(screen.getByRole('button', { name: 'Job Application Form' }));
+    fireEvent.click(within(notices).getByRole('button'));
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
@@ -49,7 +49,7 @@ describe('ReviewDetail', () => {
     setup();
     expect(await screen.findByRole('link', { name: 'https://example.test/apply' })).toHaveAttribute('href', 'https://example.test/apply');
     expect(screen.getByText('First Name')).toBeInTheDocument();
-    expect(screen.getByText('Length 2–50')).toBeInTheDocument();
+    expect(screen.getByText('2–50 characters')).toBeInTheDocument();
     expect(screen.getByText('Options: High School, PhD')).toBeInTheDocument();
   });
 
@@ -62,8 +62,9 @@ describe('ReviewDetail', () => {
     const approved = { ...pending, status: 'APPROVED', decision: { outcome: 'APPROVED', reviewer: 'reviewer', rejection_reason: '', decided_at: '2026-11-03T10:00:00Z' } };
     const api = setup({ decideForm: vi.fn().mockResolvedValue(approved) });
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
-    expect(await screen.findByText(/Learners can now practise/)).toBeInTheDocument();
-    expect(api.decideForm).toHaveBeenCalledWith('f1', 'APPROVE', '');
+    expect(api.decideForm).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve form' }));
+    await waitFor(() => expect(api.decideForm).toHaveBeenCalledWith('f1', 'APPROVE', ''));
     expect(screen.getByText(/Approved by reviewer/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument();
   });
@@ -75,18 +76,22 @@ describe('ReviewDetail', () => {
     expect(api.decideForm).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText('Rejection reason'), { target: { value: 'Date field extracted as text' } });
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('Date field extracted as text');
+    fireEvent.click(screen.getByRole('button', { name: 'Reject form' }));
     await waitFor(() => expect(api.decideForm).toHaveBeenCalledWith('f1', 'REJECT', 'Date field extracted as text'));
   });
 
   it('US-17 AC-03: a refused or repeated decision is explained', async () => {
     setup({ decideForm: vi.fn().mockRejectedValue(new ApiError(409, null, 'x')) });
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve form' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already been reviewed');
   });
 
   it('saves categories for learner search on a pending form', async () => {
     const api = setup({ updateFormMetadata: vi.fn().mockResolvedValue({ ...pending, categories: ['Employment', 'Jobs'] }) });
-    fireEvent.change(await screen.findByLabelText(/Categories/), { target: { value: 'Employment, Jobs, Employment, ' } });
+    fireEvent.change(await screen.findByLabelText('Categories'), { target: { value: 'Employment, Jobs, employment,' } });
+    expect(screen.getByRole('button', { name: 'Remove Jobs' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Save categories' }));
     await waitFor(() => expect(api.updateFormMetadata).toHaveBeenCalledWith('f1', { categories: ['Employment', 'Jobs'] }));
   });

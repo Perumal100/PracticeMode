@@ -11,17 +11,38 @@ function read() {
   }
 }
 
-export function storedAttemptId(userId, formId) {
-  return read()[`${userId}:${formId}`] ?? null;
-}
-
-export function rememberAttempt(userId, formId, attemptId) {
-  const all = read();
-  if (attemptId) all[`${userId}:${formId}`] = attemptId;
-  else delete all[`${userId}:${formId}`];
+function write(all) {
   try {
     window.localStorage.setItem(KEY, JSON.stringify(all));
   } catch {
     // Storage blocked: the attempt still works, it just cannot be resumed later.
   }
+}
+
+/** { id, status } for this learner's attempt on the form, or null. */
+export function storedAttempt(userId, formId) {
+  const entry = read()[`${userId}:${formId}`];
+  if (!entry) return null;
+  return typeof entry === 'string' ? { id: entry, status: 'IN_PROGRESS' } : entry;
+}
+
+export function storedAttemptId(userId, formId) {
+  return storedAttempt(userId, formId)?.id ?? null;
+}
+
+/** Every remembered attempt of this learner, keyed by form id. */
+export function storedAttempts(userId) {
+  const prefix = `${userId}:`;
+  const result = {};
+  for (const key of Object.keys(read())) {
+    if (key.startsWith(prefix)) result[key.slice(prefix.length)] = storedAttempt(userId, key.slice(prefix.length));
+  }
+  return result;
+}
+
+export function rememberAttempt(userId, formId, attemptId, status = 'IN_PROGRESS') {
+  const all = read();
+  if (attemptId) all[`${userId}:${formId}`] = { id: attemptId, status };
+  else delete all[`${userId}:${formId}`];
+  write(all);
 }

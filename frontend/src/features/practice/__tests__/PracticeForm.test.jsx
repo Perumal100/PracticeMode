@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../../api/client.js';
 import PracticeForm from '../PracticeForm.jsx';
-import { storedAttemptId } from '../attemptStore.js';
+import { storedAttempt, storedAttemptId } from '../attemptStore.js';
 
 const user = { id: 'u1', displayName: 'Alex', role: 'LEARNER' };
 const form = {
@@ -29,6 +29,11 @@ function setup(overrides = {}) {
   };
   render(<PracticeForm formId="f1" user={user} onBack={() => {}} api={api} />);
   return api;
+}
+
+async function submitAnyway() {
+  fireEvent.click(screen.getByRole('button', { name: 'Submit attempt' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Submit anyway' }));
 }
 
 async function startPractice() {
@@ -89,9 +94,11 @@ describe('PracticeForm', () => {
       }),
     });
     await startPractice();
-    fireEvent.click(screen.getByRole('button', { name: 'Submit attempt' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('1 answer needs attention');
+    await submitAnyway();
+    expect(await screen.findByText(/1 answer needs attention/)).toBeInTheDocument();
     expect(screen.getByText('This field is required.')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Full name/)).toHaveAttribute('aria-invalid', 'true');
+    expect(storedAttempt('u1', 'f1')).toEqual({ id: 'a1', status: 'COMPLETED' });
     expect(screen.getByLabelText(/Full name/)).toBeDisabled();
     expect(api.completeAttempt).toHaveBeenCalledWith('a1');
     expect(screen.getByRole('button', { name: 'Start a new attempt' })).toBeInTheDocument();
@@ -101,7 +108,7 @@ describe('PracticeForm', () => {
     const api = setup({ debounceMs: 10_000 });
     fireEvent.change(await startPractice(), { target: { value: 'Alex' } });
     expect(api.saveAnswer).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Submit attempt' }));
+    await submitAnyway();
     await waitFor(() => expect(api.completeAttempt).toHaveBeenCalled());
     expect(api.saveAnswer.mock.invocationCallOrder[0]).toBeLessThan(api.completeAttempt.mock.invocationCallOrder[0]);
   });
@@ -110,8 +117,8 @@ describe('PracticeForm', () => {
     const stored = { status: 'COMPLETED', completedAt: 'x', validationFeedback: [] };
     setup({ completeAttempt: vi.fn().mockRejectedValue(new ApiError(409, null, 'x', stored)) });
     await startPractice();
-    fireEvent.click(screen.getByRole('button', { name: 'Submit attempt' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('No problems were found');
+    await submitAnyway();
+    expect(await screen.findByText(/No problems were found/)).toBeInTheDocument();
   });
 
   it('US-11 AC-03: a form that is not approved cannot be started and says why', async () => {
@@ -119,6 +126,23 @@ describe('PracticeForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('not available for practice');
     expect(screen.queryByRole('button', { name: 'Start practice' })).not.toBeInTheDocument();
     expect(api.startAttempt).not.toHaveBeenCalled();
+  });
+
+  it('asks before submitting with required questions unanswered, and can be cancelled', async () => {
+    const api = setup();
+    await startPractice();
+    fireEvent.click(screen.getByRole('button', { name: 'Submit attempt' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('2 required questions unanswered');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep answering' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(api.completeAttempt).not.toHaveBeenCalled();
+  });
+
+  it('shows progress on required questions', async () => {
+    setup();
+    fireEvent.change(await startPractice(), { target: { value: 'Alex' } });
+    expect(screen.getByRole('progressbar', { name: 'Required questions answered' })).toHaveAttribute('aria-valuenow', '1');
+    expect(screen.getByText('1 of 2 required questions answered')).toBeInTheDocument();
   });
 
   it('explains a form whose rules cannot be checked (422)', async () => {
