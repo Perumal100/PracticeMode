@@ -114,3 +114,37 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReviewNotification
         fields = ("id", "form_id", "form_title", "created_at", "is_read")
+
+# Validate title/category edits while blocking changes to review status and other fields.
+class PracticeFormUpdateSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200, trim_whitespace=True)
+    categories = serializers.ListField(
+        child=serializers.CharField(
+            max_length=100,
+            allow_blank=False,
+            trim_whitespace=True,
+        ),
+        required=False,
+    )
+
+    def validate_categories(self, categories):
+        normalized = [category.casefold() for category in categories]
+        if len(set(normalized)) != len(normalized):
+            raise serializers.ValidationError(
+                "Categories must not contain duplicates."
+            )
+        return categories
+
+    def validate(self, attrs):
+        # Editing metadata must not change review status or extracted fields.
+        unknown_fields = set(self.initial_data) - {"title", "categories"}
+        if unknown_fields:
+            raise serializers.ValidationError({
+                field: "This field cannot be edited here."
+                for field in sorted(unknown_fields)
+            })
+        if not attrs:
+            raise serializers.ValidationError(
+                "Provide at least one field to update."
+            )
+        return attrs

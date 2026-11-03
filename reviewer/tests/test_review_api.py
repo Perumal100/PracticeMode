@@ -221,3 +221,112 @@ class FormReviewerApiTests(TestCase):
         self.assertEqual(response.data["categories"], [])
         created = PracticeForm.objects.get(id=response.data["id"])
         self.assertEqual(created.categories, [])
+
+    def test_reviewer_can_edit_pending_form_metadata(self):
+        response = self.reviewer_client().patch(
+            reverse("review-form-detail", kwargs={"form_id": self.pending_form.id}),
+            {"title": "Updated housing form", "categories": [" Housing "]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.pending_form.refresh_from_db()
+        self.assertEqual(self.pending_form.title, "Updated housing form")
+        self.assertEqual(self.pending_form.categories, ["Housing"])
+        self.assertEqual(self.pending_form.status, FormStatus.AWAITING_REVIEW)
+        self.assertEqual(response.data["categories"], ["Housing"])
+        self.assertFalse(ReviewDecision.objects.exists())
+
+    def test_partial_edit_preserves_omitted_metadata(self):
+        client = self.reviewer_client()
+        url = reverse("review-form-detail", kwargs={"form_id": self.pending_form.id})
+        original_title = self.pending_form.title
+
+        response = client.patch(url, {"categories": ["Housing"]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.pending_form.refresh_from_db()
+        self.assertEqual(self.pending_form.title, original_title)
+
+        response = client.patch(url, {"title": "New title"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.pending_form.refresh_from_db()
+        self.assertEqual(self.pending_form.title, "New title")
+        self.assertEqual(self.pending_form.categories, ["Housing"])
+
+    def test_edit_rejects_invalid_or_protected_fields_without_changes(self):
+        client = self.reviewer_client()
+        url = reverse("review-form-detail", kwargs={"form_id": self.pending_form.id})
+        original_title = self.pending_form.title
+        original_updated_at = self.pending_form.updated_at
+
+        # A rejected edit must leave the stored form unchanged.
+        invalid_payloads = [
+            {},
+            {"title": "   "},
+            {"categories": ["   "]},
+            {"categories": ["Housing", " housing "]},
+            {"title": "Blocked change", "status": "APPROVED"},
+            {"fields": []},
+            {"failure_reason": "Not editable here"},
+        ]
+
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                response = client.patch(url, payload, format="json")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.pending_form.refresh_from_db()
+                self.assertEqual(self.pending_form.title, original_title)
+                self.assertEqual(self.pending_form.categories, [])
+                self.assertEqual(self.pending_form.status, FormStatus.AWAITING_REVIEW)
+                self.assertEqual(self.pending_form.updated_at, original_updated_at)
+
+    def test_non_pending_forms_cannot_be_edited(self):
+        client = self.reviewer_client()
+
+        # Approval, rejection, and extraction failure all block metadata edits.
+        for form_status in (
+            FormStatus.APPROVED,
+            FormStatus.REJECTED,
+            FormStatus.FAILED,
+        ):
+            with self.subTest(form_status=form_status):
+                form = PracticeForm.objects.create(
+                    title="Locked form",
+                    source_url="https://example.test/locked",
+                    status=form_status,
+                    failure_reason="Unsupported source." if form_status == FormStatus.FAILED else "",
+                )
+                response = client.patch(
+                    reverse("review-form-detail", kwargs={"form_id": form.id}),
+                    {"title": "Must not change"},
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+                form.refresh_from_db()
+                self.assertEqual(form.title, "Locked form")
+                self.assertEqual(form.status, form_status)
+
+    def test_edit_requires_reviewer_permissions(self):
+        url = reverse("review-form-detail", kwargs={"form_id": self.pending_form.id})
+
+        response = self.client.patch(url, {"title": "Blocked"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.force_authenticate(self.learner)
+        response = self.client.patch(url, {"title": "Blocked"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.pending_form.refresh_from_db()
+        self.assertEqual(self.pending_form.title, "Fictional housing application")
+
+    def test_edit_missing_form_returns_404(self):
+        response = self.reviewer_client().patch(
+            reverse(
+                "review-form-detail",
+                kwargs={"form_id": "00000000-0000-0000-0000-000000000000"},
+            ),
+            {"title": "Missing form"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
