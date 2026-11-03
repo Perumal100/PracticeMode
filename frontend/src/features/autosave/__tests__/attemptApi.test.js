@@ -52,6 +52,29 @@ describe('attemptApi', () => {
     expect(error.status).toBe(0);
   });
 
+  it('extractSavedAnswers reads the API-05 response returned by the dev-rohan backend', () => {
+    // Shape from attempts.serializers.AttemptSerializer: UUID ids, answers ordered by field position.
+    const attempt = {
+      id: '0b8c1a52-6a43-4d55-9b0e-2f3f0d6f8a11',
+      formId: '5d0e7f2c-1c9a-4a8e-8f43-0c3b9e2a7d10',
+      status: 'IN_PROGRESS',
+      startedAt: '2026-11-02T12:00:00Z',
+      lastSavedAt: '2026-11-02T12:01:00Z',
+      completedAt: null,
+      validationFeedback: [],
+      answers: [
+        { fieldId: '9a1f4c3e-2b7d-4e8a-a1c2-3d4e5f6a7b8c', value: 'Alex Morgan', savedAt: '2026-11-02T12:01:00Z' },
+        { fieldId: 'c7d8e9f0-1a2b-4c3d-8e4f-5a6b7c8d9e0f', value: true, savedAt: '2026-11-02T12:00:30Z' },
+        { fieldId: 'e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b', value: null, savedAt: '2026-11-02T12:00:10Z' },
+      ],
+    };
+    expect(extractSavedAnswers(attempt)).toEqual({
+      '9a1f4c3e-2b7d-4e8a-a1c2-3d4e5f6a7b8c': 'Alex Morgan',
+      'c7d8e9f0-1a2b-4c3d-8e4f-5a6b7c8d9e0f': true,
+      'e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b': null,
+    });
+  });
+
   it('extractSavedAnswers maps answers to { fieldId: value }', () => {
     expect(extractSavedAnswers({ answers: [{ fieldId: 7, value: 'A' }] })).toEqual({ 7: 'A' });
     expect(extractSavedAnswers({})).toEqual({});

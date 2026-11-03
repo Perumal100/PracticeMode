@@ -14,9 +14,8 @@ export function saveAnswer(attemptId, fieldId, value) {
   );
 }
 
-// The design defines Answer as (attemptId, fieldId, value, updatedAt) but does
-// not give an example GET response. This assumes the attempt has an `answers`
-// list of { fieldId, value }. Confirm with the backend owner and adjust here only.
+// API-05 returns the attempt with an `answers` list of { fieldId, value, savedAt }
+// (dev-rohan, attempts.serializers.AttemptSerializer). Adjust here only if it changes.
 export function extractSavedAnswers(attempt) {
   const list = Array.isArray(attempt?.answers) ? attempt.answers : [];
   const values = {};
