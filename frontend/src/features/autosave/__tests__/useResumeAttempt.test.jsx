@@ -41,6 +41,7 @@ describe('useResumeAttempt', () => {
   });
 
   it.each([
+    [401, 'Your session has ended. Sign in again to continue this attempt.'],
     [403, 'You do not have access to this practice attempt.'],
     [404, 'This practice attempt does not exist.'],
     [500, 'Your saved answers could not be loaded. Please try again.'],

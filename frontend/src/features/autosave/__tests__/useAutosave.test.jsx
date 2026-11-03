@@ -100,6 +100,18 @@ describe('useAutosave', () => {
     expect(result.current.statuses['7'].message).toBe(SAVE_MESSAGES.invalid);
   });
 
+  it.each([
+    [401, 'NOT_AUTHENTICATED', SAVE_MESSAGES.signedOut],
+    [409, 'ATTEMPT_COMPLETED', SAVE_MESSAGES.completed],
+    [422, 'UNSUPPORTED_FORM_SCHEMA', SAVE_MESSAGES.unsupported],
+  ])('AC-03: explains a %i %s rejection instead of suggesting a retry', async (status, code, message) => {
+    const saveAnswer = vi.fn().mockRejectedValue(new ApiError(status, code, 'x'));
+    const { result } = setup({ saveAnswer, debounceMs: 0 });
+
+    await act(async () => result.current.queueSave(7, 'Alex'));
+    expect(result.current.statuses['7']).toMatchObject({ state: 'error', message });
+  });
+
   it('retry resends the latest value and clears the warning on success', async () => {
     const saveAnswer = vi
       .fn()
