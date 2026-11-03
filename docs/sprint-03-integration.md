@@ -1,6 +1,6 @@
 # Sprint 3 Integration Guide
 
-How to combine the Sprint 3 branches into one working build. Each branch has been checked against the others, and the combined result was tested end to end: 116 backend tests, 64 frontend tests, 25 extension unit and 25 end-to-end tests, and a full-stack walkthrough through the web app.
+How to combine the Sprint 3 branches into one working build. Each branch has been checked against the others, and the combined result was tested end to end: 116 backend tests, 67 frontend tests, 25 extension unit and 25 end-to-end tests, and a full-stack walkthrough through the web app.
 
 ## Branches
 
@@ -8,7 +8,7 @@ How to combine the Sprint 3 branches into one working build. Each branch has bee
 | --- | --- | --- | --- | --- |
 | `develop-perumal` | Perumal | Django project, `reviewer` app: review queue, decisions, notifications, API-15 import | US-04, US-10, US-16, US-17, US-25 (server) | root `08c575f` |
 | `Dev-Atheer` | Atheer | Form categories and failure reason (`reviewer.0002`), pending-form metadata edit (`PATCH /api/review/forms/{id}`), `seed_demo` | US-02 data, US-15 data | based on `develop-perumal` |
-| `kashvi_branch` | Kashvi (screens added by Siddharth) | `frontend/`: API client, US-08 autosave hooks, and the sign-in, catalog, practice and review screens | US-01, US-02, US-04, US-08, US-10, US-11, US-16, US-17, US-26 (client) | based on `develop-perumal` |
+| `kashvi_branch` | Kashvi (screens added by Siddharth) | `frontend/`: API client, US-08 autosave hooks, and the sign-in, learner home, practice workspace and reviewer dashboard screens (Tailwind + shadcn/ui) | US-01, US-02, US-04, US-08, US-10, US-11, US-16, US-17, US-26 (client) | based on `develop-perumal` |
 | `dev-rohan` | Rohan | `accounts` (staff and learner sign-in), `catalog` (learner search), `attempts` (create, resume, autosave, complete) | US-01, US-02, US-08 (server), US-11 (server), US-26 | root `caa0388` (`main`) |
 | `browser-extension` | Siddharth | `Form_Scrapper_Extension/`: multi-step extraction and sending to API-15 | US-25 (client) | root `caa0388` (`main`) |
 
@@ -40,7 +40,7 @@ After merging, check:
 python manage.py check
 python manage.py makemigrations --check --dry-run   # expect "No changes detected"
 python manage.py test                               # 116 tests
-(cd frontend && npm install && npm test)            # 64 tests
+(cd frontend && npm install && npm test)            # 67 tests
 (cd Form_Scrapper_Extension && npm install && npm run setup:browsers && npm test)   # 25 unit + 25 e2e
 ```
 
