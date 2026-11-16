@@ -1,15 +1,15 @@
 // App shell: restores the session, then shows the workspace for the user's
 // role. The server enforces every permission; hiding screens is only a
 // convenience (Sprint 2, Rule 3).
-import { BarChart3, ClipboardCheck, FileText, LayoutDashboard, Users } from 'lucide-react';
+import { BarChart3, ClipboardCheck, FileText, LifeBuoy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 import { AppShell } from '@/components/app-shell.jsx';
-import { EmptyState } from '@/components/empty-state.jsx';
-import { PageHeader } from '@/components/page-header.jsx';
 import { BrandMark } from '@/components/brand.jsx';
 import { getSession as defaultGetSession, signOut as defaultSignOut } from './api/session.js';
 import Insights, { FormInsights } from './features/analytics/Insights.jsx';
+import RequestDetail from './features/assistance/RequestDetail.jsx';
+import RequestQueue from './features/assistance/RequestQueue.jsx';
 import SignIn from './features/auth/SignIn.jsx';
 import Catalog from './features/catalog/Catalog.jsx';
 import PracticeForm from './features/practice/PracticeForm.jsx';
@@ -25,21 +25,8 @@ const NAV = {
     { key: 'review', path: '/review', label: 'Form review', icon: ClipboardCheck },
     { key: 'insights', path: '/insights', label: 'Practice insights', icon: BarChart3 },
   ],
-  INSTRUCTOR: [{ key: 'instructor', path: '/instructor', label: 'Overview', icon: LayoutDashboard }],
+  INSTRUCTOR: [{ key: 'instructor', path: '/instructor', label: 'Assistance requests', icon: LifeBuoy }],
 };
-
-function InstructorHome() {
-  return (
-    <>
-      <PageHeader title="Instructor overview" description="Assistance requests and learner progress will appear here." />
-      <EmptyState
-        icon={Users}
-        title="Instructor tools arrive in a later sprint"
-        description="Learners' assistance requests (US-03, US-05) and progress filters (US-22) are in the product backlog."
-      />
-    </>
-  );
-}
 
 export default function App({ getSession = defaultGetSession, signOut = defaultSignOut }) {
   const [session, setSession] = useState({ state: 'loading', user: null });
@@ -91,7 +78,9 @@ export default function App({ getSession = defaultGetSession, signOut = defaultS
         ? <ReviewDetail key={route.id} formId={route.id} onBack={() => navigate('/review')} onInsights={(id) => navigate(`/insights/${id}`)} onOpenForm={(id) => navigate(`/review/${id}`)} />
         : <ReviewQueue onOpen={(id) => navigate(`/review/${id}`)} />;
     } else {
-      page = <InstructorHome />;
+      page = route.id
+        ? <RequestDetail key={route.id} requestId={route.id} onBack={() => navigate('/instructor')} />
+        : <RequestQueue status={route.query.status} onStatusChange={(status) => navigate(`/instructor?status=${status}`)} onOpen={(id) => navigate(`/instructor/${id}`)} />;
     }
     content = (
       <AppShell user={user} nav={NAV[user.role] ?? []} active={route.section} onNavigate={navigate} onSignOut={leave}>

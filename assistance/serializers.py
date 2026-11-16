@@ -34,6 +34,21 @@ class LearnerListFilterSerializer(RequestBodySerializer):
     attemptId = serializers.UUIDField(required=False)
 
 
+class InstructorListFilterSerializer(RequestBodySerializer):
+    status = serializers.ChoiceField(choices=AssistanceRequest.Status.choices, required=False)
+
+
+class ScheduleSerializer(RequestBodySerializer):
+    meetingDetails = serializers.CharField(max_length=1000, error_messages={
+        "required": "Add the meeting details the learner needs.", "blank": "Add the meeting details the learner needs.",
+    })
+
+
+def learner_code(user):
+    """The non-personal short code that tells learners with the same display name apart."""
+    return user.get_username().rsplit("-", 1)[-1]
+
+
 class AssistanceRequestSerializer(serializers.ModelSerializer):
     requestId = serializers.UUIDField(source="id")
     attemptId = serializers.UUIDField(source="attempt_id")
@@ -42,12 +57,20 @@ class AssistanceRequestSerializer(serializers.ModelSerializer):
     requestedSlot = serializers.DateTimeField(source="requested_slot")
     meetingDetails = serializers.CharField(source="meeting_details")
     instructorName = serializers.SerializerMethodField()
+    learnerName = serializers.SerializerMethodField()
+    learnerCode = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at")
 
     class Meta:
         model = AssistanceRequest
         fields = ("requestId", "status", "attemptId", "formId", "formTitle", "requestedSlot", "note",
-                  "meetingDetails", "instructorName", "createdAt")
+                  "meetingDetails", "instructorName", "learnerName", "learnerCode", "createdAt")
 
     def get_instructorName(self, request):
         return display_name(request.instructor) if request.instructor_id else None
+
+    def get_learnerName(self, request):
+        return display_name(request.learner)
+
+    def get_learnerCode(self, request):
+        return learner_code(request.learner)

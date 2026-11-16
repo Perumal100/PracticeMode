@@ -1,9 +1,11 @@
-// Minimal hash router: #/forms, #/forms/<id>, #/review, #/review/<id>, #/insights, #/insights/<id>.
+// Minimal hash router: #/forms, #/forms/<id>, #/review/<id>, #/instructor?status=SCHEDULED.
+// Filters and tabs live in the query, so a reload or a shared link keeps them.
 import { useEffect, useState } from 'react';
 
 function parse() {
-  const parts = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  return { section: parts[0] ?? '', id: parts[1] ?? null };
+  const [path, search = ''] = window.location.hash.replace(/^#\/?/, '').split('?');
+  const parts = path.split('/').filter(Boolean);
+  return { section: parts[0] ?? '', id: parts[1] ?? null, query: Object.fromEntries(new URLSearchParams(search)) };
 }
 
 export function navigate(path) {
