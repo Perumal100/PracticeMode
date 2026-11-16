@@ -1,7 +1,8 @@
 from django.db import DatabaseError, transaction
-from django.db.models import prefetch_related_objects
+from django.db.models import F, prefetch_related_objects
 from django.utils import timezone
 
+from guidance.models import Hint
 from reviewer.models import FormField, FormStatus, PracticeForm
 
 from .errors import AttemptError
@@ -88,3 +89,26 @@ def complete_attempt(learner, attempt_id):
         return attempt, True
     except (DatabaseError, ProgressCounter.DoesNotExist):
         raise AttemptError("COMPLETION_FAILED", "The completion result could not be saved. Please retry.", 503) from None
+
+
+def record_hint_view(learner, attempt_id, field_id):
+    """Count one opened hint. The client sends this once per opening and never retries it."""
+    try:
+        with transaction.atomic():
+            attempt = _owned_attempt(learner, attempt_id, lock=True)
+            if attempt.status == Attempt.Status.COMPLETED:
+                raise AttemptError("ATTEMPT_COMPLETED", "Hints opened after submission are not counted.", 409)
+            try:
+                field = FormField.objects.get(pk=field_id)
+            except FormField.DoesNotExist:
+                raise AttemptError("FIELD_NOT_FOUND", "The field does not exist.", 404) from None
+            if field.practice_form_id != attempt.practice_form_id:
+                raise AttemptError("FIELD_FORM_MISMATCH", "The field does not belong to this attempt's form.", 400)
+            if not Hint.objects.filter(field=field).exists():
+                raise AttemptError("HINT_NOT_FOUND", "This question has no hint.", 404)
+            ProgressCounter.objects.filter(attempt=attempt).update(
+                hint_view_count=F("hint_view_count") + 1, updated_at=timezone.now(),
+            )
+            return ProgressCounter.objects.get(attempt=attempt).hint_view_count
+    except (DatabaseError, ProgressCounter.DoesNotExist):
+        raise AttemptError("HINT_VIEW_FAILED", "The hint view could not be recorded.", 503) from None

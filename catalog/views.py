@@ -37,7 +37,7 @@ class FormDetailView(APIView):
         if request.query_params:
             raise ValidationError({"filters": "Form detail does not support filters."})
         try:
-            form = PracticeForm.objects.get(pk=form_id)
+            form = PracticeForm.objects.prefetch_related("fields__hints").get(pk=form_id)
         except PracticeForm.DoesNotExist:
             return Response({"error": "FORM_NOT_FOUND"}, status=404)
         if form.status == FormStatus.SUPERSEDED:

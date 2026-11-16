@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     "reviewer",
     "catalog",
     "attempts",
+    "guidance",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
