@@ -1,5 +1,5 @@
 // US-02: the learner's home. Search approved practice forms by keyword and
-// several categories, and pick up attempts already started in this browser.
+// several categories, and pick up attempts saved on the learner's account.
 import { AlertCircle, ArrowRight, CheckCircle2, Clock3, FileText, Layers, Search, SearchX, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/empty-state.jsx';
@@ -13,14 +13,14 @@ import { Input } from '@/components/ui/input.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { cn } from '@/lib/utils';
 import { listForms as defaultListForms } from '../../api/catalog.js';
-import { storedAttempts } from '../practice/attemptStore.js';
+import { attemptForForm, listMyAttempts as defaultListMyAttempts } from '../../api/attempts.js';
 
-export default function Catalog({ user, onOpen, listForms = defaultListForms }) {
+export default function Catalog({ onOpen, listForms = defaultListForms, listMyAttempts = defaultListMyAttempts }) {
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState([]);
   const [allForms, setAllForms] = useState(null);
   const [state, setState] = useState({ status: 'loading', forms: [], error: null });
-  const attempts = useMemo(() => (user ? storedAttempts(user.id) : {}), [user]);
+  const [history, setHistory] = useState([]);
 
   async function search(filters) {
     setState((s) => ({ ...s, status: 'loading', error: null }));
@@ -41,15 +41,20 @@ export default function Catalog({ user, onOpen, listForms = defaultListForms }) 
   useEffect(() => {
     // The unfiltered list supplies the category choices and the totals.
     search({}).then((forms) => forms && setAllForms(forms));
+    // Without the history the catalog still works; cards just offer "Practise".
+    listMyAttempts().then(setHistory, () => setHistory([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const categories = useMemo(() => [...new Set((allForms ?? []).flatMap((f) => f.categories ?? []))].sort(), [allForms]);
+  const attempts = useMemo(
+    () => Object.fromEntries((allForms ?? []).map((f) => [f.id, attemptForForm(history, f.id)]).filter(([, a]) => a)),
+    [allForms, history],
+  );
   const counts = useMemo(() => {
-    const ids = new Set((allForms ?? []).map((f) => f.id));
-    const mine = Object.entries(attempts).filter(([formId]) => ids.has(formId)).map(([, a]) => a.status);
+    const mine = Object.values(attempts).map((a) => a.status);
     return { inProgress: mine.filter((s) => s === 'IN_PROGRESS').length, completed: mine.filter((s) => s === 'COMPLETED').length };
-  }, [allForms, attempts]);
+  }, [attempts]);
   const filtered = keyword.trim() !== '' || selected.length > 0;
 
   function toggle(category) {

@@ -57,3 +57,24 @@ class AttemptSerializer(CompletionSerializer):
 
     class Meta(CompletionSerializer.Meta):
         fields = ("id", "formId", "status", "startedAt", "lastSavedAt", "completedAt", "validationFeedback", "answers")
+
+
+class HistorySerializer(serializers.ModelSerializer):
+    """One row of a learner's practice history: outcome counts, never the answers."""
+
+    formId = serializers.UUIDField(source="practice_form_id")
+    formTitle = serializers.CharField(source="practice_form.title")
+    formStatus = serializers.CharField(source="practice_form.status")
+    startedAt = serializers.DateTimeField(source="started_at")
+    lastSavedAt = serializers.DateTimeField(source="last_saved_at")
+    completedAt = serializers.DateTimeField(source="completed_at")
+    answeredCount = serializers.IntegerField(source="answered_count")
+    issueCount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Attempt
+        fields = ("id", "formId", "formTitle", "formStatus", "status", "startedAt", "lastSavedAt", "completedAt",
+                  "answeredCount", "issueCount")
+
+    def get_issueCount(self, attempt):
+        return len(attempt.validation_feedback) if attempt.status == Attempt.Status.COMPLETED else None

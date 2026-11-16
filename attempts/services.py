@@ -1,5 +1,5 @@
 from django.db import DatabaseError, transaction
-from django.db.models import F, prefetch_related_objects
+from django.db.models import Count, F, Q, prefetch_related_objects
 from django.utils import timezone
 
 from guidance.models import Hint
@@ -112,3 +112,16 @@ def record_hint_view(learner, attempt_id, field_id):
             return ProgressCounter.objects.get(attempt=attempt).hint_view_count
     except (DatabaseError, ProgressCounter.DoesNotExist):
         raise AttemptError("HINT_VIEW_FAILED", "The hint view could not be recorded.", 503) from None
+
+
+def attempt_history(learner):
+    """Every attempt of this learner, newest first, on any version of any form."""
+    try:
+        return list(
+            Attempt.objects.filter(learner=learner)
+            .select_related("practice_form")
+            .annotate(answered_count=Count("answers", filter=~Q(answers__value=None)))
+            .order_by("-started_at", "id")
+        )
+    except DatabaseError:
+        raise AttemptError("HISTORY_UNAVAILABLE", "Your practice history could not be loaded. Please retry.", 503) from None

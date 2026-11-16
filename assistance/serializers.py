@@ -45,8 +45,8 @@ class ScheduleSerializer(RequestBodySerializer):
 
 
 def learner_code(user):
-    """The non-personal short code that tells learners with the same display name apart."""
-    return user.get_username().rsplit("-", 1)[-1]
+    """The learner's username: it tells learners with the same display name apart and is not personal data."""
+    return user.get_username()
 
 
 class AssistanceRequestSerializer(serializers.ModelSerializer):

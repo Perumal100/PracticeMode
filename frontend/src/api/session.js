@@ -1,4 +1,5 @@
-// US-01 sign-in calls (API-01, dev-rohan accounts app).
+// US-01 sign-in calls (API-01). Every role signs in with a username and password;
+// learners create their own account (no email or other personal details).
 import { apiRequest } from './client.js';
 
 // Sets the csrftoken cookie and returns the signed-in user, or null.
@@ -7,15 +8,15 @@ export async function getSession() {
   return data?.user ?? null;
 }
 
-export async function signInLearner(displayName) {
+export async function signIn(username, password) {
   await getSession(); // login is CSRF-protected even before a session exists
-  const data = await apiRequest('/api/login', { method: 'POST', body: { role: 'LEARNER', displayName } });
+  const data = await apiRequest('/api/login', { method: 'POST', body: { username, password } });
   return data.user;
 }
 
-export async function signInStaff(username, password) {
+export async function register({ username, displayName, password }) {
   await getSession();
-  const data = await apiRequest('/api/login', { method: 'POST', body: { username, password } });
+  const data = await apiRequest('/api/register', { method: 'POST', body: { username, displayName, password } });
   return data.user;
 }
 

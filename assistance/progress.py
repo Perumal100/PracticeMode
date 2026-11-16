@@ -25,7 +25,7 @@ class ProgressFilterSerializer(RequestBodySerializer):
     minErrors = serializers.IntegerField(required=False, min_value=0)
     minHints = serializers.IntegerField(required=False, min_value=0)
     formId = serializers.UUIDField(required=False)
-    learnerCode = serializers.RegexField(r"^[A-Za-z0-9]{1,32}$", required=False)
+    learnerCode = serializers.RegexField(r"^[A-Za-z0-9_.-]{1,150}$", required=False)
 
 
 class ProgressRowSerializer(serializers.ModelSerializer):
@@ -69,7 +69,7 @@ class ProgressView(APIView):
             .order_by("-started_at", "id")
         )
         if code := wanted.get("learnerCode"):
-            attempts = attempts.filter(learner__username__endswith=f"-{code}")
+            attempts = attempts.filter(learner__username=code)
             # AC-03: a learner outside the caller's scope is refused, whether or not they exist.
             if not attempts.exists():
                 raise AssistanceError("PROGRESS_FORBIDDEN", "You can only see progress for learners whose request you accepted.", 403)

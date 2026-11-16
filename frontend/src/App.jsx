@@ -1,7 +1,7 @@
 // App shell: restores the session, then shows the workspace for the user's
 // role. The server enforces every permission; hiding screens is only a
 // convenience (Sprint 2, Rule 3).
-import { Activity, BarChart3, ClipboardCheck, FileText, LifeBuoy } from 'lucide-react';
+import { Activity, BarChart3, ClipboardCheck, FileText, History, LifeBuoy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 import { AppShell } from '@/components/app-shell.jsx';
@@ -13,15 +13,19 @@ import RequestDetail from './features/assistance/RequestDetail.jsx';
 import RequestQueue from './features/assistance/RequestQueue.jsx';
 import SignIn from './features/auth/SignIn.jsx';
 import Catalog from './features/catalog/Catalog.jsx';
+import PracticeHistory from './features/history/PracticeHistory.jsx';
 import PracticeForm from './features/practice/PracticeForm.jsx';
 import ReviewDetail from './features/review/ReviewDetail.jsx';
 import ReviewQueue from './features/review/ReviewQueue.jsx';
 import { navigate, useHashRoute } from './lib/useHashRoute.js';
 
 const HOME = { LEARNER: '/forms', FORM_REVIEWER: '/review', INSTRUCTOR: '/instructor' };
-const SECTION_ROLE = { forms: 'LEARNER', review: 'FORM_REVIEWER', insights: 'FORM_REVIEWER', instructor: 'INSTRUCTOR', progress: 'INSTRUCTOR' };
+const SECTION_ROLE = { forms: 'LEARNER', history: 'LEARNER', review: 'FORM_REVIEWER', insights: 'FORM_REVIEWER', instructor: 'INSTRUCTOR', progress: 'INSTRUCTOR' };
 const NAV = {
-  LEARNER: [{ key: 'forms', path: '/forms', label: 'Practice forms', icon: FileText }],
+  LEARNER: [
+    { key: 'forms', path: '/forms', label: 'Practice forms', icon: FileText },
+    { key: 'history', path: '/history', label: 'My practice', icon: History },
+  ],
   FORM_REVIEWER: [
     { key: 'review', path: '/review', label: 'Form review', icon: ClipboardCheck },
     { key: 'insights', path: '/insights', label: 'Practice insights', icon: BarChart3 },
@@ -74,9 +78,11 @@ export default function App({ getSession = defaultGetSession, signOut = defaultS
     content = <SignIn onSignedIn={(signedIn) => setSession({ state: 'ready', user: signedIn })} />;
   } else {
     let page;
-    if (user.role === 'LEARNER') {
+    if (user.role === 'LEARNER' && route.section === 'history') {
+      page = <PracticeHistory onOpen={(attempt) => navigate(`/forms/${attempt.formId}?attempt=${attempt.id}`)} onBrowse={() => navigate('/forms')} />;
+    } else if (user.role === 'LEARNER') {
       page = route.id
-        ? <PracticeForm key={route.id} formId={route.id} user={user} onBack={() => navigate('/forms')} onOpenForm={(id) => navigate(`/forms/${id}`)} />
+        ? <PracticeForm key={`${route.id}:${route.query.attempt ?? ''}`} formId={route.id} attemptId={route.query.attempt} user={user} onBack={() => navigate('/forms')} onOpenForm={(id) => navigate(`/forms/${id}`)} />
         : <Catalog user={user} onOpen={(id) => navigate(`/forms/${id}`)} />;
     } else if (user.role === 'FORM_REVIEWER' && route.section === 'insights') {
       page = route.id

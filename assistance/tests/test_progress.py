@@ -58,7 +58,7 @@ class ProgressTests(AssistanceTestCase):
         row = next(row for row in self.ines.get(URL).data if row["attemptId"] == str(self.submitted.pk))
         self.assertEqual(
             {key: row[key] for key in ("learnerName", "learnerCode", "formTitle", "status", "validationErrorCount", "hintViewCount")},
-            {"learnerName": "Alex", "learnerCode": "aaa111", "formTitle": "Course registration", "status": "COMPLETED",
+            {"learnerName": "Alex", "learnerCode": "learner-aaa111", "formTitle": "Course registration", "status": "COMPLETED",
              "validationErrorCount": 3, "hintViewCount": 1},
         )
         self.assertNotIn("Jordan Rivera", str(self.ines.get(URL).data))
@@ -71,8 +71,8 @@ class ProgressTests(AssistanceTestCase):
 
     # AC-03
     def test_asking_for_a_learner_outside_the_scope_is_refused(self):
-        self.assertEqual(set(self.attempts(self.ines, learnerCode="aaa111")), {str(self.attempt.pk), str(self.submitted.pk)})
-        for code in ("bbb222", "zzz999"):
+        self.assertEqual(set(self.attempts(self.ines, learnerCode="learner-aaa111")), {str(self.attempt.pk), str(self.submitted.pk)})
+        for code in ("learner-bbb222", "zzz999"):
             with self.subTest(code=code):
                 response = self.ines.get(URL, {"learnerCode": code})
                 self.assertEqual((response.status_code, response.data["error"]), (403, "PROGRESS_FORBIDDEN"))

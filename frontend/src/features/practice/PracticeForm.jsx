@@ -15,6 +15,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { NativeSelect } from '@/components/ui/input.jsx';
 import { Progress } from '@/components/ui/progress.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
+import { attemptForForm, listMyAttempts as defaultListMyAttempts } from '../../api/attempts.js';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
 import AssistancePanel from '../assistance/AssistancePanel.jsx';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
@@ -48,11 +49,14 @@ function LanguagePicker({ languages, value, onChange }) {
   );
 }
 
-export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {} }) {
+// `attemptId` opens one attempt from the learner's history; otherwise the
+// account's newest attempt on this form is resumed.
+export default function PracticeForm({ formId, attemptId, user, onBack, onOpenForm, api = {} }) {
   const getForm = api.getForm ?? defaultGetForm;
   const startAttempt = api.startAttempt ?? defaultStartAttempt;
+  const listMyAttempts = api.listMyAttempts ?? defaultListMyAttempts;
   const [form, setForm] = useState({ status: 'loading', data: null, error: null });
-  const [attempt, setAttempt] = useState(() => storedAttempt(user.id, formId));
+  const [attempt, setAttempt] = useState(() => (attemptId ? { id: attemptId, status: 'IN_PROGRESS' } : undefined));
   const [start, setStart] = useState({ busy: false, error: null });
   const [languageCode, setLanguageCode] = useState(storedLanguage);
 
@@ -67,6 +71,22 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
     );
     return () => { cancelled = true; };
   }, [formId, getForm]);
+
+  useEffect(() => {
+    if (attempt !== undefined) return undefined;
+    let cancelled = false;
+    listMyAttempts().then(
+      (history) => {
+        if (cancelled) return;
+        const found = attemptForForm(history, formId);
+        setAttempt(found ? { id: found.id, status: found.status } : null);
+      },
+      // Offline or failing history: fall back to what this browser remembers.
+      () => !cancelled && setAttempt(storedAttempt(user.id, formId)),
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formId, listMyAttempts, user.id]);
 
   function openAttempt(id, status = 'IN_PROGRESS') {
     rememberAttempt(user.id, formId, id, status);
@@ -86,7 +106,7 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
 
   const breadcrumb = [{ label: 'Practice forms', onClick: onBack }, { label: form.data?.title ?? 'Form' }];
 
-  if (form.status === 'loading') {
+  if (form.status === 'loading' || (form.status === 'ready' && attempt === undefined)) {
     return (
       <>
         <PageHeader title={<Skeleton className="h-7 w-64" />} breadcrumb={[{ label: 'Practice forms', onClick: onBack }, { label: '…' }]} />

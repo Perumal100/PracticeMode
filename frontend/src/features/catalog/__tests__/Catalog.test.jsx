@@ -41,12 +41,20 @@ describe('Catalog', () => {
     expect(screen.queryByText('Housing application')).not.toBeInTheDocument();
   });
 
-  it('offers Continue or View result for attempts started in this browser', async () => {
-    window.localStorage.setItem('pm_attempts_v1', JSON.stringify({ 'u1:f1': { id: 'a1', status: 'IN_PROGRESS' }, 'u1:f2': { id: 'a2', status: 'COMPLETED' } }));
-    render(<Catalog user={{ id: 'u1' }} onOpen={() => {}} listForms={vi.fn().mockResolvedValue(forms)} />);
+  it('offers Continue or View result from the account\'s practice history', async () => {
+    const history = [
+      { id: 'a3', formId: 'f1', status: 'COMPLETED' },
+      { id: 'a1', formId: 'f1', status: 'IN_PROGRESS' },
+      { id: 'a2', formId: 'f2', status: 'COMPLETED' },
+    ];
+    render(<Catalog onOpen={() => {}} listForms={vi.fn().mockResolvedValue(forms)} listMyAttempts={vi.fn().mockResolvedValue(history)} />);
     expect(await screen.findByRole('button', { name: 'Continue: Housing application' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'View result: Job application' })).toBeInTheDocument();
-    window.localStorage.clear();
+  });
+
+  it('still lists forms when the history cannot be loaded', async () => {
+    render(<Catalog onOpen={() => {}} listForms={vi.fn().mockResolvedValue(forms)} listMyAttempts={vi.fn().mockRejectedValue(new ApiError(503, null, 'x'))} />);
+    expect(await screen.findByRole('button', { name: 'Practise: Housing application' })).toBeInTheDocument();
   });
 
   it('explains a rejected search (400)', async () => {

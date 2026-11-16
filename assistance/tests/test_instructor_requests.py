@@ -28,7 +28,7 @@ class InstructorRequestTests(AssistanceTestCase):
         self.assertEqual([row["requestId"] for row in ines_rows], [str(self.waiting.pk)])
         row = ines_rows[0]
         self.assertEqual((row["formTitle"], row["learnerName"], row["learnerCode"], row["status"]),
-                         ("Housing application", "Alex", "aaa111", "REQUESTED"))
+                         ("Housing application", "Alex", "learner-aaa111", "REQUESTED"))
         omar_rows = {row["requestId"]: row for row in self.omar.get(URL).data}
         self.assertEqual(set(omar_rows), {str(self.waiting.pk), str(self.taken.pk)})
         self.assertEqual(omar_rows[str(self.taken.pk)]["meetingDetails"], MEETING)
@@ -45,7 +45,7 @@ class InstructorRequestTests(AssistanceTestCase):
         response = self.ines.get(f"{URL}/{self.waiting.pk}")
         self.assertEqual(response.status_code, 200)
         for key, value in (("note", "I am stuck on the address question."), ("formTitle", "Housing application"),
-                           ("attemptId", str(self.attempt.pk)), ("formId", str(self.form.pk)), ("learnerCode", "aaa111")):
+                           ("attemptId", str(self.attempt.pk)), ("formId", str(self.form.pk)), ("learnerCode", "learner-aaa111")):
             self.assertEqual(response.data[key], value)
         self.assertNotIn("answers", response.data)
 

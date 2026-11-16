@@ -25,6 +25,7 @@ function setup(overrides = {}) {
     getAttempt: vi.fn().mockResolvedValue(attempt()),
     saveAnswer: vi.fn((attemptId, fieldId, value) => Promise.resolve({ fieldId, value, savedAt: '2026-11-03T10:00:00Z' })),
     completeAttempt: vi.fn().mockResolvedValue({ status: 'COMPLETED', completedAt: '2026-11-03T10:05:00Z', validationFeedback: [] }),
+    listMyAttempts: vi.fn().mockRejectedValue(new Error('offline')),
     debounceMs: 0,
     ...overrides,
   };
@@ -166,5 +167,28 @@ describe('PracticeForm', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Start a new attempt' }));
     expect(await screen.findByRole('button', { name: 'Start practice' })).toBeInTheDocument();
     expect(storedAttemptId('u1', 'f1')).toBeNull();
+  });
+
+  it('resumes the account\'s unfinished attempt on another device', async () => {
+    const api = setup({
+      listMyAttempts: vi.fn().mockResolvedValue([{ id: 'a9', formId: 'f1', status: 'IN_PROGRESS' }, { id: 'a8', formId: 'f1', status: 'COMPLETED' }]),
+      getAttempt: vi.fn().mockResolvedValue(attempt({ id: 'a9', answers: [{ fieldId: 'name', value: 'Alex', savedAt: 'x' }] })),
+    });
+    expect(await screen.findByLabelText(/Full name/)).toHaveValue('Alex');
+    expect(api.getAttempt).toHaveBeenCalledWith('a9');
+    expect(api.startAttempt).not.toHaveBeenCalled();
+  });
+
+  it('opens the attempt chosen from the practice history', async () => {
+    const api = {
+      getForm: vi.fn().mockResolvedValue(form),
+      getAttempt: vi.fn().mockResolvedValue(attempt({ id: 'a8', status: 'COMPLETED', validationFeedback: [] })),
+      listMyAttempts: vi.fn(),
+      debounceMs: 0,
+    };
+    render(<PracticeForm formId="f1" attemptId="a8" user={user} onBack={() => {}} api={api} />);
+    expect(await screen.findByText('Attempt submitted. No problems were found.')).toBeVisible();
+    expect(api.getAttempt).toHaveBeenCalledWith('a8');
+    expect(api.listMyAttempts).not.toHaveBeenCalled();
   });
 });

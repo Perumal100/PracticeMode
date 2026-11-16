@@ -43,7 +43,7 @@ const { statuses, queueSave, flush, retry } = useAutosave({ attemptId, enabled: 
   | `503 SAVE_FAILED`, network error | Not saved. Retry. |
 
 - Learners need a session before these calls work: `GET /api/session` sets the CSRF cookie, then
-  `POST /api/login` with `{ "role": "LEARNER", "displayName": "..." }` (dev-rohan, `accounts` app).
+  `POST /api/register` with `{ "username", "displayName", "password" }`, or `POST /api/login` with `{ "username", "password" }` (`accounts` app).
   The sign-in screen and the practice form page (US-11) that use this feature are not built yet.
 - Typing is debounced by 800 ms, and blur saves immediately. Pass `debounceMs: 0` to save on every change.
 

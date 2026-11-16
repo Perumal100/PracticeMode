@@ -20,6 +20,7 @@ function setup(form) {
     startAttempt: vi.fn().mockResolvedValue(attempt),
     getAttempt: vi.fn().mockResolvedValue(attempt),
     saveAnswer: vi.fn(),
+    listMyAttempts: vi.fn().mockRejectedValue(new Error('offline')),
     debounceMs: 0,
   };
   render(<PracticeForm formId="f1" user={user} onBack={() => {}} api={api} />);

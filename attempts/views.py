@@ -9,7 +9,7 @@ from accounts.permissions import HasRole
 from . import services
 from .serializers import (
     AnswerSerializer, AttemptSerializer, CompletionRequestSerializer,
-    CompletionSerializer, CreateAttemptSerializer, HintViewSerializer, SaveAnswerSerializer,
+    CompletionSerializer, CreateAttemptSerializer, HintViewSerializer, HistorySerializer, SaveAnswerSerializer,
 )
 
 
@@ -24,6 +24,10 @@ class LearnerAttemptView(APIView):
 
 
 class AttemptCreateView(LearnerAttemptView):
+    def get(self, request):
+        """The learner's practice history, kept on the account."""
+        return Response(HistorySerializer(services.attempt_history(request.user), many=True).data)
+
     def post(self, request):
         data = CreateAttemptSerializer(data=request.data)
         data.is_valid(raise_exception=True)

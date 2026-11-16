@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
-from .serializers import LoginSerializer, UserSerializer
+from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -22,6 +22,18 @@ class LoginView(APIView):
         serializer.is_valid(raise_exception=True)
         user = services.sign_in(request, serializer.validated_data)
         return Response({"user": UserSerializer(user).data})
+
+
+@method_decorator(never_cache, name="dispatch")
+class RegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        SessionAuthentication().enforce_csrf(request)
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = services.register_learner(request, serializer.validated_data)
+        return Response({"user": UserSerializer(user).data}, status=201)
 
 
 @method_decorator(never_cache, name="dispatch")

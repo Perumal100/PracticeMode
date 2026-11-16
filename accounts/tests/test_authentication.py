@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 
 from accounts import identity
 from accounts.permissions import HasRole
-from accounts.serializers import LoginSerializer
+from accounts.serializers import LoginSerializer, RegisterSerializer
 
 
 class InstructorOnlyView(APIView):
@@ -66,14 +66,24 @@ class IdentityBoundaryTests(SimpleTestCase):
         for payload in (
             {}, {"username": "teacher"}, {"username": "teacher", "password": ""},
             {"role": "ADMIN", "username": "teacher", "password": "secret"},
-            {"role": "LEARNER", "displayName": "   "},
-            {"role": "LEARNER", "displayName": "Alex", "password": "secret"},
-            {"role": "LEARNER", "displayName": "Alex", "username": "other"},
+            # Display-name-only access was replaced by learner accounts.
+            {"role": "LEARNER", "displayName": "Alex"},
             {"displayName": "Alex"},
             {"username": "teacher", "password": "secret", "is_superuser": True},
         ):
             with self.subTest(payload=payload):
                 self.assertFalse(LoginSerializer(data=payload).is_valid())
+
+    def test_registration_rejects_weak_or_personal_payloads(self):
+        valid = {"username": "maya_r", "displayName": "Maya", "password": "practise-forms-42"}
+        self.assertTrue(RegisterSerializer(data=valid).is_valid())
+        for change in (
+            {"username": "ab"}, {"username": "maya r"}, {"username": "x" * 31},
+            {"displayName": "   "}, {"password": "short"}, {"password": "maya_r12", "username": "maya_r12"},
+            {"password": "12345678"}, {"email": "maya@example.test"}, {"role": "FORM_REVIEWER"},
+        ):
+            with self.subTest(change=change):
+                self.assertFalse(RegisterSerializer(data={**valid, **change}).is_valid())
 
 
 @override_settings(ROOT_URLCONF=__name__)
@@ -165,46 +175,71 @@ class SessionAuthenticationTests(TestCase):
         self.assertEqual(self.login().status_code, 403)
         self.assertNotIn(SESSION_KEY, self.client.session)
 
-    def test_password_access_cannot_sign_in_a_learner(self):
-        self.instructor.groups.set([Group.objects.create(name="LEARNER")])
-        self.assertEqual(self.login().status_code, 403)
-        self.assertNotIn(SESSION_KEY, self.client.session)
-
-    def learner_login(self, display_name="Alex"):
-        return self.client.post("/api/login", {"role": "LEARNER", "displayName": display_name},
+    def register(self, username="maya_r", display_name="Maya", password="practise-forms-42"):
+        return self.client.post("/api/register", {"username": username, "displayName": display_name, "password": password},
             format="json", HTTP_X_CSRFTOKEN=self.csrf())
 
-    def test_learner_display_name_login_creates_a_private_learner_session(self):
-        response = self.learner_login("  Alex  ")
-        self.assertEqual(response.status_code, 200)
+    def test_registration_creates_a_learner_account_and_signs_it_in(self):
+        response = self.register(display_name="  Maya  ")
+        self.assertEqual(response.status_code, 201)
         self.assertEqual(set(response.data["user"]), {"id", "displayName", "role"})
-        self.assertEqual(response.data["user"]["displayName"], "Alex")
-        self.assertEqual(response.data["user"]["role"], "LEARNER")
+        self.assertEqual((response.data["user"]["displayName"], response.data["user"]["role"]), ("Maya", "LEARNER"))
         learner = get_user_model()._default_manager.get(pk=response.data["user"]["id"])
         self.assertEqual(self.client.session[SESSION_KEY], str(learner.pk))
-        # Privacy NFR: a display name only; no email or password hash is stored.
-        self.assertFalse(learner.has_usable_password())
+        # Privacy: a chosen username, a display name and a bcrypt hash; no email.
+        self.assertTrue(learner.password.startswith("bcrypt_sha256$"))
         self.assertEqual(learner.email, "")
         self.assertEqual(identity.role_for(learner), identity.LEARNER)
-        self.assertNotIn(learner.get_username(), str(response.data))
-        self.assertEqual(self.client.get("/api/session").data, response.data)
+        self.assertNotIn("practise-forms-42", str(response.data))
+        self.assertEqual(self.client.get("/api/session").data, {"user": response.data["user"]})
 
-    def test_learners_with_the_same_display_name_get_distinct_identities(self):
-        first = self.learner_login().data["user"]["id"]
+    def test_a_learner_signs_back_in_to_the_same_account(self):
+        first = self.register().data["user"]["id"]
         self.client = APIClient(enforce_csrf_checks=True)
-        second = self.learner_login().data["user"]["id"]
-        self.assertNotEqual(first, second)
-        self.assertEqual(Group.objects.get(name=identity.LEARNER).user_set.count(), 2)
+        response = self.login(username="maya_r", password="practise-forms-42")
+        self.assertEqual((response.status_code, response.data["user"]["id"]), (200, first))
+        self.assertEqual(self.login(username="maya_r", password="wrong-password").status_code, 401)
 
-    def test_learner_session_cannot_use_staff_routes(self):
-        self.learner_login()
+    def test_username_must_be_unique_ignoring_case(self):
+        self.register()
+        self.client = APIClient(enforce_csrf_checks=True)
+        response = self.register(username="MAYA_R", display_name="Another Maya")
+        self.assertEqual((response.status_code, response.data["error"]), (409, "USERNAME_TAKEN"))
+        self.assertNotIn(SESSION_KEY, self.client.session)
+        self.assertEqual(self.register(username="instructor").status_code, 409)
+
+    def test_invalid_registration_is_400_and_creates_nothing(self):
+        before = get_user_model()._default_manager.count()
+        for kwargs in ({"password": "short"}, {"username": "a b"}, {"display_name": ""}):
+            with self.subTest(kwargs=kwargs):
+                self.assertEqual(self.register(**kwargs).status_code, 400)
+        self.assertEqual(get_user_model()._default_manager.count(), before)
+        self.assertNotIn(SESSION_KEY, self.client.session)
+
+    def test_registration_requires_csrf(self):
+        response = self.client.post("/api/register", {"username": "maya_r", "displayName": "Maya", "password": "practise-forms-42"}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(get_user_model()._default_manager.filter(username="maya_r").exists())
+
+    def test_registration_never_creates_staff(self):
+        self.register()
+        learner = get_user_model()._default_manager.get(username="maya_r")
+        self.assertEqual(list(learner.groups.values_list("name", flat=True)), ["LEARNER"])
+        self.assertFalse(learner.is_staff or learner.is_superuser)
         self.assertEqual(self.client.get("/test/instructor").status_code, 403)
+
+    def test_learner_cannot_claim_a_staff_role_at_sign_in(self):
+        self.register()
+        self.client = APIClient(enforce_csrf_checks=True)
+        response = self.login(username="maya_r", password="practise-forms-42", role="INSTRUCTOR")
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(SESSION_KEY, self.client.session)
 
     def test_learner_storage_failure_is_503_without_identity_or_session(self):
         model = get_user_model()
         before = model._default_manager.count()
         with patch("accounts.identity.Group.objects.get_or_create", side_effect=DatabaseError):
-            response = self.learner_login()
+            response = self.register()
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.data["error"], "LEARNER_IDENTITY_UNAVAILABLE")
         self.assertEqual(model._default_manager.count(), before)
