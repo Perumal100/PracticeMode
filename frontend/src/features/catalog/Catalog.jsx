@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { listForms as defaultListForms } from '../../api/catalog.js';
 import { attemptForForm, listMyAttempts as defaultListMyAttempts } from '../../api/attempts.js';
 
-export default function Catalog({ onOpen, listForms = defaultListForms, listMyAttempts = defaultListMyAttempts }) {
+export default function Catalog({ onOpen, onRequest, listForms = defaultListForms, listMyAttempts = defaultListMyAttempts }) {
   const [keyword, setKeyword] = useState('');
   const [selected, setSelected] = useState([]);
   const [allForms, setAllForms] = useState(null);
@@ -78,6 +78,7 @@ export default function Catalog({ onOpen, listForms = defaultListForms, listMyAt
       <PageHeader
         title="Practice forms"
         description="Every form here has been checked by a Form Reviewer. Use made-up details; nothing you enter is sent to the real website."
+        actions={onRequest && <Button variant="outline" onClick={onRequest}>Request a form</Button>}
       />
 
       <div className="grid grid-cols-3 gap-3 sm:gap-4">
@@ -126,7 +127,12 @@ export default function Catalog({ onOpen, listForms = defaultListForms, listMyAt
             icon={SearchX}
             title={filtered ? 'No practice forms match your search' : 'No practice forms yet'}
             description={filtered ? 'Try other words or fewer categories.' : 'Forms appear here once a Form Reviewer approves them.'}
-            action={filtered && <Button variant="outline" onClick={clear}>Clear filters</Button>}
+            action={(filtered || onRequest) && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {filtered && <Button variant="outline" onClick={clear}>Clear filters</Button>}
+                {onRequest && <Button variant={filtered ? 'ghost' : 'outline'} onClick={onRequest}>Request this form</Button>}
+              </div>
+            )}
           />
         )}
         {state.status === 'ready' && state.forms.length > 0 && (

@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from attempts.validation import validation_feedback
+from form_requests.services import link_open_requests
 from guidance.services import copy_guidance
 
 from .models import FormField, FormStatus, PracticeForm, ReviewDecision, ReviewNotification
@@ -162,6 +163,7 @@ class FormExtractionView(APIView):
                 for field in payload["fields"]
             ])
             ReviewNotification.objects.create(practice_form=practice_form)
+            link_open_requests(practice_form)
         practice_form = PracticeForm.objects.prefetch_related("fields").get(id=practice_form.id)
         return Response(PracticeFormDetailSerializer(practice_form).data, status=status.HTTP_201_CREATED)
 
