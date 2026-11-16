@@ -26,7 +26,6 @@ const TOGGLES = [
   { key: 'minHints', value: String(HINT_THRESHOLD), label: `Frequent hint use (${HINT_THRESHOLD} or more)` },
 ];
 const FILTER_KEYS = ['incomplete', 'minErrors', 'minHints', 'formId', 'learnerCode'];
-const HEAD = 'normal-case tracking-normal';
 
 function progressError(error) {
   if (error?.status === 401) return 'Your session has ended. Sign in again.';
@@ -126,12 +125,12 @@ export default function LearnerProgress({ query = {}, onQueryChange, listProgres
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className={HEAD}>Learner</TableHead>
-                    <TableHead className={HEAD}>Practice form</TableHead>
-                    <TableHead className={HEAD}>Attempt</TableHead>
-                    <TableHead className={cn(HEAD, 'text-right')}>Errors</TableHead>
-                    <TableHead className={cn(HEAD, 'text-right')}>Hint views</TableHead>
-                    <TableHead className={HEAD}>Last saved</TableHead>
+                    <TableHead>Learner</TableHead>
+                    <TableHead>Practice form</TableHead>
+                    <TableHead>Attempt</TableHead>
+                    <TableHead className="text-right">Errors</TableHead>
+                    <TableHead className="text-right">Hint views</TableHead>
+                    <TableHead>Last saved</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

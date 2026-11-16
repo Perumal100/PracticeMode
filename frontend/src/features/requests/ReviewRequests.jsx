@@ -19,7 +19,6 @@ import * as defaultApi from '../../api/formRequests.js';
 import { listReviewForms as defaultListReviewForms } from '../../api/review.js';
 
 const TABS = [['OPEN', 'Waiting'], ['LINKED', 'Linked'], ['DECLINED', 'Declined']];
-const HEAD = 'normal-case tracking-normal';
 
 // Several learners may ask for the same page: show it once, with the count.
 function onePerPage(requests) {
@@ -159,10 +158,10 @@ export default function ReviewRequests({ status = 'OPEN', onStatusChange, onOpen
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className={HEAD}>Requested page</TableHead>
-                  <TableHead className={HEAD}>Learners</TableHead>
-                  <TableHead className={HEAD}>{tab === 'OPEN' ? 'Note' : tab === 'LINKED' ? 'Practice form' : 'Reason'}</TableHead>
-                  <TableHead className={HEAD}><span className="sr-only">Actions</span></TableHead>
+                  <TableHead>Requested page</TableHead>
+                  <TableHead>Learners</TableHead>
+                  <TableHead>{tab === 'OPEN' ? 'Note' : tab === 'LINKED' ? 'Practice form' : 'Reason'}</TableHead>
+                  <TableHead><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -20,7 +20,6 @@ const EMPTY = {
   COMPLETED: [CalendarCheck, 'No completed sessions yet', 'Sessions you mark as completed are listed here.'],
   CANCELLED: [CalendarCheck, 'No cancelled sessions', 'Sessions of yours that were cancelled are listed here.'],
 };
-const HEAD = 'normal-case tracking-normal';
 
 export function assistanceErrorMessage(error) {
   if (error?.status === 401) return 'Your session has ended. Sign in again.';
@@ -88,11 +87,11 @@ export default function RequestQueue({ status = 'REQUESTED', onStatusChange, onO
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
-                      <TableHead className={HEAD}>Learner</TableHead>
-                      <TableHead className={HEAD}>Practice form</TableHead>
-                      <TableHead className={HEAD}>Requested time</TableHead>
-                      <TableHead className={HEAD}>What they need</TableHead>
-                      <TableHead className={HEAD}><span className="sr-only">Open</span></TableHead>
+                      <TableHead>Learner</TableHead>
+                      <TableHead>Practice form</TableHead>
+                      <TableHead>Requested time</TableHead>
+                      <TableHead>What they need</TableHead>
+                      <TableHead><span className="sr-only">Open</span></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

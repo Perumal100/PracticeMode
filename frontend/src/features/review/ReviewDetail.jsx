@@ -55,7 +55,7 @@ function OptionsSummary({ options, label }) {
         className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
       >
         {open ? 'Hide options' : `Show all ${options.length}`}
-        <ChevronDown className={`size-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`size-3.5 transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="mt-2 max-w-xl rounded-md border bg-muted/40 p-2">

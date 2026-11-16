@@ -35,7 +35,7 @@ export function AppShell({ user, nav, active, onNavigate, onSignOut, children })
       <div className="hidden bg-sidebar lg:block">
       <aside className="flex flex-col px-3 py-4 lg:sticky lg:top-0 lg:h-dvh">
         <div className="px-2 pb-6"><Brand tone="light" /></div>
-        <p className="px-2.5 pb-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-muted">Workspace</p>
+        <p className="px-2.5 pb-2 text-xs font-medium text-sidebar-muted">Workspace</p>
         <nav aria-label="Main" className="flex flex-col gap-0.5">{navItems}</nav>
         <div className="mt-auto flex items-center gap-3 rounded-lg border border-white/10 p-2.5">
           <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{initials(user.displayName)}</span>

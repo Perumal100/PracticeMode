@@ -13,7 +13,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDateTime } from '@/lib/format.js';
 import { listMyAttempts as defaultListMyAttempts } from '../../api/attempts.js';
 
-const HEAD = 'normal-case tracking-normal';
 const FORM_NOTE = { SUPERSEDED: 'since updated to a newer version', WITHDRAWN: 'removed by a Form Reviewer' };
 
 function formNote(attempt) {
@@ -68,11 +67,11 @@ export default function PracticeHistory({ onOpen, onBrowse, listMyAttempts = def
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className={HEAD}>Practice form</TableHead>
-                <TableHead className={HEAD}>Started</TableHead>
-                <TableHead className={HEAD}>Attempt</TableHead>
-                <TableHead className={HEAD}>Result</TableHead>
-                <TableHead className={HEAD}><span className="sr-only">Open</span></TableHead>
+                <TableHead>Practice form</TableHead>
+                <TableHead>Started</TableHead>
+                <TableHead>Attempt</TableHead>
+                <TableHead>Result</TableHead>
+                <TableHead><span className="sr-only">Open</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
