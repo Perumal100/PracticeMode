@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "catalog",
     "attempts",
     "guidance",
+    "assistance",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

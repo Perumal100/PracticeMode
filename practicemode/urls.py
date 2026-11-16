@@ -7,4 +7,5 @@ urlpatterns = [
     path("api/", include("reviewer.urls")),
     path("api/", include("catalog.urls")),
     path("api/", include("attempts.urls")),
+    path("api/", include("assistance.urls")),
 ]
