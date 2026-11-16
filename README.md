@@ -12,7 +12,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
 | **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 280 backend · 180 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
+| **Tests** | 286 backend · 181 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -115,7 +115,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - a per-form table, and for each form, the questions learners get wrong most often and which rule they broke, plus the median time to submit
   - an approved form's review page links straight to its insights
 
-- **AI drafts of guidance:** **Draft hints with AI** and **Draft translations with AI** fill in what is missing using Gemini, with Groq as the backup. Only the form's questions (labels, answer types, rules, existing hints) are sent, never anything a learner typed. Drafts are marked "AI draft", learners do not see them, and the form cannot be approved until the reviewer approves (as is, or after editing) or discards every draft.
+- **AI drafts of guidance:** **Draft with AI** opens one dialog for hints and translations (pick the languages) and fills in only what is missing, using Gemini with Groq as the backup. It runs in batches of up to 8 questions per language with a progress bar and a Stop button. Hints are written first, so the translations include them, and a hint added after a translation existed is translated into it. Each provider is retried once after a temporary failure (rate limit, overload, timeout). Only the form's questions (labels, answer types, rules, existing hints) are sent, never anything a learner typed. Drafts are marked "AI draft", learners do not see them, and the form cannot be approved until the reviewer approves (as is, or after editing) or discards every draft.
 - **Guidance:** on the review page, each question has a **Hint and translations** button: a hint in the original language and, per language, a translated label and guidance. A sidebar card holds the preparation checklist with fictional examples. Guidance changes no structure, so it stays editable after approval, and learners see changes at once.
 - **Instructors:** approve or decline instructor sign-ups, add an instructor directly (active at once), and remove or restore one. Removing an instructor signs them out and returns their booked sessions to the waiting queue; their history is kept.
 - **Change requests:** instructors' reports of mistakes in published forms, by form and question. Open the form to revise it, then mark the request resolved or declined with an answer the instructor sees.
@@ -241,8 +241,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 280 backend tests
-(cd frontend && npm test)                           # 180 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 286 backend tests
+(cd frontend && npm test)                           # 181 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
@@ -417,7 +417,7 @@ Requests are matched by page: scheme, host and path, ignoring the query string, 
 | `POST` | `/api/review/forms/{formId}/preview-check` | `{"answers": {fieldId: value}}` returns the `validationFeedback` a learner would get; nothing is saved |
 | `POST` | `/api/review/forms/{formId}/revisions` | Start revising an approved form: returns a pending copy (`201`), or `409` with `formId` when a copy from that source already awaits review |
 | `PUT` | `/api/review/forms/{formId}/fields/{fieldId}/guidance` | `{hint, translations: [{language_code, translated_label, guidance_text}]}` replaces a question's hint and translations; blank removes them. Pending or approved forms only (`409 GUIDANCE_LOCKED` otherwise) |
-| `POST` | `/api/review/forms/{formId}/guidance/ai` | `{task: "hints"}` or `{task: "translations", languages?: [...]}` drafts the missing hints or translations with AI as unapproved drafts; returns `{created, skipped, providers}`. `503 AI_NOT_CONFIGURED` without keys, `502 AI_FAILED` when every provider fails |
+| `POST` | `/api/review/forms/{formId}/guidance/ai` | `{task: "hints"}` or `{task: "translations", languages?: [...]}`, optionally limited to `fieldIds` (up to 50), drafts the missing hints or translations with AI as unapproved drafts. A translation whose hint was never translated gets its guidance filled in and becomes a draft again. Returns `{created, updated, skipped, providers}`. `503 AI_NOT_CONFIGURED` without keys, `502 AI_FAILED` when every provider fails |
 | `POST` | `/api/review/forms/{formId}/guidance/approve-drafts` | `{fieldIds?}` approves AI drafts as written (all of them when `fieldIds` is omitted) |
 | `POST` | `/api/review/forms/{formId}/guidance/discard-drafts` | Removes every AI draft; guidance written or approved by a reviewer stays |
 | `PUT` | `/api/review/forms/{formId}/checklist` | `{items: [{description, fictional_example}]}` replaces the preparation checklist, in order |

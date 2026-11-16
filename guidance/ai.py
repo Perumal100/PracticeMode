@@ -8,6 +8,7 @@ reviewer approves it.
 """
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -80,20 +81,40 @@ def _groq(system, prompt):
 PROVIDERS = (("Gemini", _gemini), ("Groq", _groq))
 
 
+RETRY_STATUSES = {429, 500, 502, 503, 504}
+RETRY_PAUSE_SECONDS = 2.0
+
+
+def _transient(error):
+    """Overload, rate limits and timeouts often pass within seconds; a bad key or request does not."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in RETRY_STATUSES
+    return isinstance(error, (urllib.error.URLError, TimeoutError))
+
+
 def ask(system, prompt):
-    """The parsed JSON reply and the name of the provider that gave it."""
+    """The parsed JSON reply and the name of the provider that gave it.
+
+    Each provider gets one retry after a temporary failure before the next
+    provider is tried.
+    """
     failures, configured = [], False
     for name, call in PROVIDERS:
-        try:
-            text = call(system, prompt)
-            if text is None:
-                continue
-            configured = True
-            return json.loads(text), name
-        except (urllib.error.URLError, TimeoutError, OSError, KeyError, IndexError, TypeError, ValueError) as error:
-            configured = True
-            detail = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else type(error).__name__
-            failures.append(f"{name}: {detail}")
+        for attempt in (1, 2):
+            try:
+                text = call(system, prompt)
+                if text is None:
+                    break
+                configured = True
+                return json.loads(text), name
+            except (urllib.error.URLError, TimeoutError, OSError, KeyError, IndexError, TypeError, ValueError) as error:
+                configured = True
+                if attempt == 1 and _transient(error):
+                    time.sleep(RETRY_PAUSE_SECONDS)
+                    continue
+                detail = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else type(error).__name__
+                failures.append(f"{name}: {detail}")
+                break
     if not configured:
         raise AIUnavailable
     raise AIFailed("; ".join(failures))

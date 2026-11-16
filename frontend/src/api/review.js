@@ -67,8 +67,10 @@ export function saveChecklist(formId, items) {
 
 // AI drafts of hints or translations; learners do not see them until approved.
 // Resolves to { created, skipped, providers }.
-export function draftGuidance(formId, task, languages) {
-  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/guidance/ai`, { method: 'POST', body: languages ? { task, languages } : { task } });
+// `fieldIds` limits the request to a batch of questions, so progress can be shown.
+export function draftGuidance(formId, task, languages, fieldIds) {
+  const body = { task, ...(languages ? { languages } : {}), ...(fieldIds ? { fieldIds } : {}) };
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/guidance/ai`, { method: 'POST', body });
 }
 
 export function approveDrafts(formId, fieldIds) {
