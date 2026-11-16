@@ -43,7 +43,7 @@ export default function Question({ field, number, value, disabled, messages = []
       aria-controls={hintId}
       onClick={toggleHint}
       className={cn(
-        'inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-medium transition-colors',
+        'inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px',
         isCheckbox && 'ml-auto',
         hintOpen ? 'bg-accent-soft text-accent-soft-foreground' : 'text-primary hover:bg-accent-soft',
       )}

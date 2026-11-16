@@ -113,7 +113,7 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
           {action.error && <Alert variant="destructive" className="mt-3"><AlertCircle />{action.error}</Alert>}
         </CardContent>
         <CardFooter>
-          <Button type="submit" disabled={Boolean(action.busy)}>{action.busy === 'schedule' && <Loader2 className="animate-spin" />}Accept and schedule</Button>
+          <Button type="submit" disabled={Boolean(action.busy)}>{action.busy === 'schedule' && <Loader2 className="animate-spin motion-reduce:animate-none" />}Accept and schedule</Button>
         </CardFooter>
       </form>
     );
@@ -137,7 +137,7 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
         {scheduled && (
           <CardFooter className="flex-wrap">
             <Button onClick={() => run('complete', () => completeRequest(request.requestId))} disabled={Boolean(action.busy)}>
-              {action.busy === 'complete' && <Loader2 className="animate-spin" />}Mark as completed
+              {action.busy === 'complete' && <Loader2 className="animate-spin motion-reduce:animate-none" />}Mark as completed
             </Button>
             <Button variant="ghost" className="text-destructive" onClick={() => setConfirmCancel(true)} disabled={Boolean(action.busy)}>Cancel session</Button>
           </CardFooter>
@@ -161,7 +161,7 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
               <LearnerName request={request} />
               {/* US-22: progress is readable once this instructor has accepted the request. */}
               {onProgress && request.instructorName && request.status !== 'CANCELLED' && (
-                <Button variant="link" size="sm" className="mt-1" onClick={() => onProgress(request.learnerCode)}>View this learner's progress</Button>
+                <Button variant="link" size="sm" className="mt-1" onClick={() => onProgress(request.learnerCode)}>View this learner’s progress</Button>
               )}
             </Row>
             <Row label="Practice form">{request.formTitle}</Row>

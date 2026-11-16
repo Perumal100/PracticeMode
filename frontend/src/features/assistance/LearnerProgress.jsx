@@ -76,13 +76,13 @@ export default function LearnerProgress({ query = {}, onQueryChange, listProgres
         title="Learner progress"
         description="Attempts by learners whose assistance request you accepted. Counts only; you never see what a learner typed."
       />
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 shadow-xs sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <fieldset className="flex flex-wrap items-center gap-2">
           <legend className="sr-only">Show only</legend>
           {TOGGLES.map((toggle) => {
             const on = filters[toggle.key] === toggle.value;
             return (
-              <label key={toggle.key} className={cn('cursor-pointer rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring', on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:border-input hover:text-foreground')}>
+              <label key={toggle.key} className={cn('cursor-pointer rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors active:translate-y-px has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2', on ? 'border-primary bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:border-input hover:text-foreground')}>
                 <input type="checkbox" className="sr-only" checked={on} onChange={() => set(toggle.key, on ? null : toggle.value)} />
                 {toggle.label}
               </label>

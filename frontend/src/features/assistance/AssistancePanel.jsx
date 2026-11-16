@@ -116,7 +116,7 @@ export default function AssistancePanel({ attemptId, api = {}, now = Date.now })
         {state.status === 'error' && <p className="text-[13px] text-destructive">The status could not be refreshed.</p>}
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={state.status === 'refreshing'}>
-            {state.status === 'refreshing' ? <Loader2 className="animate-spin" /> : <RefreshCw />}Check for updates
+            {state.status === 'refreshing' ? <Loader2 className="animate-spin motion-reduce:animate-none" /> : <RefreshCw />}Check for updates
           </Button>
           <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setConfirmCancel(true)} disabled={busy}>Cancel request</Button>
         </div>
@@ -141,7 +141,7 @@ export default function AssistancePanel({ attemptId, api = {}, now = Date.now })
         </div>
         {errors.form && <p role="alert" className="text-[13px] font-medium text-destructive">{errors.form}</p>}
         <div className="flex gap-2">
-          <Button size="sm" onClick={send} disabled={busy}>{busy && <Loader2 className="animate-spin" />}Send request</Button>
+          <Button size="sm" onClick={send} disabled={busy}>{busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}Send request</Button>
           <Button variant="ghost" size="sm" onClick={() => { setFormOpen(false); setErrors({}); }} disabled={busy}>Not now</Button>
         </div>
       </div>

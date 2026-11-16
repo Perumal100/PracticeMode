@@ -178,7 +178,7 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
               </div>
               {start.error && <Alert variant="destructive"><AlertCircle />{start.error}</Alert>}
               <Button className="w-full" size="lg" onClick={begin} disabled={start.busy}>
-                {start.busy && <Loader2 className="animate-spin" />}Start practice
+                {start.busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}Start practice
               </Button>
             </CardContent>
           </Card>
@@ -192,7 +192,7 @@ function SaveSummary({ statuses }) {
   const states = Object.values(statuses).map((s) => s.state);
   const failed = states.filter((s) => s === 'error').length;
   if (failed) return <p className="flex items-center gap-2 text-sm font-medium text-destructive"><CloudOff className="size-4" />{failed} answer{failed === 1 ? '' : 's'} not saved</p>;
-  if (states.some((s) => s === 'pending' || s === 'saving')) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Saving…</p>;
+  if (states.some((s) => s === 'pending' || s === 'saving')) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin motion-reduce:animate-none" />Saving…</p>;
   if (states.length) return <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 className="size-4" />All changes saved</p>;
   return <p className="text-sm text-muted-foreground">Answers save automatically as you go.</p>;
 }
@@ -356,7 +356,7 @@ function AttemptView({ attemptId, form, language, api, onCompleted, onRestart })
               <Button variant="outline" className="w-full" onClick={onRestart}><RotateCcw />Start a new attempt</Button>
             ) : (
               <Button type="submit" className="w-full" disabled={submit.busy}>
-                {submit.busy && <Loader2 className="animate-spin" />}{submit.busy ? 'Submitting…' : 'Submit attempt'}
+                {submit.busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}{submit.busy ? 'Submitting…' : 'Submit attempt'}
               </Button>
             )}
           </CardFooter>
