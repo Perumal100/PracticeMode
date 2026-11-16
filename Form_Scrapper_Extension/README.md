@@ -40,11 +40,15 @@ The panel shows detected steps, captured steps, field count, the current step, a
 | Local test fixtures (`localhost`, `127.0.0.1`, `*.localhost`, `*.test`, `file://`) | Allowed | Full automation up to the final review screen. Designated never-issued test values are used for identity fields, and a synthetic PDF for required uploads. |
 | Any other website | **Only after you approve that site** | The approval prompt explains that even intermediate Next clicks can send data to the site. You can choose **Assisted mode** instead, and revoke approval from the panel. |
 
+**Opening the form.** On a job or benefits page that shows a description and an "Apply" button but no form yet, automatic extraction clicks that button once, before the first step, to open the form. It recognises labels such as "Apply", "Apply now", "Apply for this job" and "Start application", follows a link that would open a new tab in the same tab, and records the button as `extraction.openedWith` in the export. It never clicks an "Apply" that belongs to a form with fields or sits right next to an input (a referral or coupon code box), and on an external site it waits for your approval like any other click. In assisted mode it asks you to click it.
+
 The extension never:
-- clicks Submit, Apply, Pay, Confirm, Create account, Register, or similar final actions
+- clicks Submit, Pay, Confirm, Create account, Register, or similar final actions, or an "Apply" that sends a form
 - clicks a button whose label mixes "continue" with a completion word (for example "Submit and continue"). It pauses and asks you instead.
 - uploads files, fills identity or payment numbers, creates passwords, or ticks legal attestations on external sites
 - solves or bypasses CAPTCHA, sign-in, identity verification or verification codes
+
+Site search boxes (anything inside a `role="search"` landmark) are not part of a form and are never extracted.
 
 **Assisted mode** works on any site. You fill in and navigate the form yourself, and the extension records each new step as it appears. It also records fields revealed by your answers, attributed to the choice that revealed them. Your typed answers are never stored.
 

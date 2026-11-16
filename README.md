@@ -12,7 +12,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
 | **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 241 backend · 153 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
+| **Tests** | 241 backend · 153 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -123,6 +123,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 
 ### Browser extension (form extractor)
 - Walks multi-step forms with fictional sample data and **never submits**. It stops before final "Submit", "Pay" or "Create account" buttons.
+- On a job page whose form appears only after **Apply**, it clicks that button once to open the form (never an "Apply" that sends a form or a code), and follows an Apply link that would open a new tab in the same tab.
 - Captures labels, types, required flags, options (including custom and lazy dropdowns), validation, and conditional questions. It also handles iframes and shadow DOM.
 - Safety model: automatic on test pages; on real sites only with permission, or in **assisted mode**, where the user navigates and the extension only records.
 - **Send to PracticeMode for review** maps the capture to the import API. It reports any field it can't import (file uploads, passwords) and records the page in the address bar as the source (for example a Datadog careers page, not the Greenhouse iframe inside it).
@@ -234,7 +235,7 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ```bash
 .venv/bin/python manage.py test                     # 241 backend tests
 (cd frontend && npm test)                           # 153 frontend tests (Vitest + Testing Library)
-(cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 26 end-to-end
+(cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
 - Every implemented story has tests for its main path **and** for its error, edge or permission case (see the story table above).

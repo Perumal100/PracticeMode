@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Test 17 — Job page with an Apply button</title>
+  <link rel="stylesheet" href="_shared.css"/>
+  <style>
+    .job { max-width:640px; margin:0 auto; }
+    .apply-entry { background:#2563eb; color:#fff; border:none; border-radius:8px; padding:12px 28px; font-size:15px; font-weight:600; cursor:pointer; }
+    .site-search { display:flex; gap:8px; margin-bottom:24px; }
+    .coupon { display:flex; gap:8px; margin:16px 0; }
+    .step { display:none; } .step.active { display:block; }
+  </style>
+</head>
+<body>
+<header>
+  <form class="site-search" role="search" onsubmit="event.preventDefault()">
+    <label for="q">Search jobs</label><input type="search" id="q" name="q"/>
+    <button type="submit">Search</button>
+  </form>
+</header>
+<main class="job" id="job">
+  <h1>Warehouse Associate</h1>
+  <p>Fictional posting for testing. Full-time, day shift, Springfield.</p>
+  <p>Pick, pack and ship orders. Lift up to 20 kg.</p>
+  <!-- A referral-code box with its own "Apply": it sends a code, so it is never the entry button. -->
+  <div class="coupon"><label for="ref">Referral code</label><input id="ref" name="referral"/><button type="button" onclick="alert('referral code applied')">Apply</button></div>
+  <button class="apply-entry" type="button" onclick="openForm()">Apply now</button>
+</main>
+
+<section class="card" id="application" hidden>
+  <h2>Application</h2>
+  <div class="step active" id="s1">
+    <p class="step-indicator">Step 1 of 2 — Your details</p>
+    <div class="field"><label for="full-name">Full name *</label><input id="full-name" name="fullName" required/></div>
+    <div class="field"><label for="email">Email *</label><input type="email" id="email" name="email" required/></div>
+    <div class="field"><label for="shift">Preferred shift</label><select id="shift" name="shift"><option value="">Choose…</option><option>Day</option><option>Night</option></select></div>
+    <div class="btn-row"><button class="btn btn-next" type="button" onclick="next()">Next</button></div>
+  </div>
+  <div class="step" id="s2">
+    <p class="step-indicator">Step 2 of 2 — Experience</p>
+    <div class="field"><label for="years">Years of warehouse experience</label><input type="number" id="years" name="years" min="0" max="50"/></div>
+    <div class="btn-row"><button class="btn btn-submit" type="button" onclick="alert('submitted')">Submit application</button></div>
+  </div>
+</section>
+<script>
+  function openForm() {
+    document.getElementById('job').hidden = true;
+    document.getElementById('application').hidden = false;
+  }
+  function next() {
+    if (!document.getElementById('full-name').value || !document.getElementById('email').value) return;
+    document.getElementById('s1').classList.remove('active');
+    document.getElementById('s2').classList.add('active');
+  }
+</script>
+</body>
+</html>

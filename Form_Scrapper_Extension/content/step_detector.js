@@ -99,6 +99,51 @@
     return actions;
   }
 
+  // ── Entry action ("Apply" on a job page) ────────────────────────────
+  // Job and benefit pages often show a description and an "Apply" button;
+  // the form only appears after it is clicked. That click opens the form and
+  // sends nothing, unlike an "Apply" that submits a filled-in form.
+  const ENTRY_RE = /^(apply|apply\s+(now|online|today|here)|apply\s+for\s+(this|the)\s+(job|position|role|opening|vacancy)|apply\s+to\s+(this\s+)?(job|position|role)|easy\s+apply|quick\s+apply|start(\s+(your|my|an?|the))?\s+application|begin(\s+(your|my|an?|the))?\s+application|i'?m\s+interested)\s*[→›»>]?$/i;
+  const NOT_A_FORM = /\b(search|keyword|newsletter|subscribe|zip|postcode|location)\b/i;
+  const ENTRY_MAX_FORM_FIELDS = 2;
+  const INPUTS = 'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="image"]), select, textarea';
+
+  /** Fields that look like part of an application, not a site search or a newsletter box. */
+  function formLikeFields(fields) {
+    return (fields || []).filter((f) => {
+      const el = f._el;
+      if (el?.type === 'search' || el?.closest?.('[role="search"], header, nav, footer')) return false;
+      return !NOT_A_FORM.test(`${f.label || ''} ${f.name || ''} ${f.id || ''} ${f.autocomplete || ''}`);
+    });
+  }
+
+  /** Inside a form, or right beside an input (a coupon or code box): such an "Apply" sends something. */
+  function attachedToInputs(el) {
+    const form = el.form || el.closest('form');
+    if (form && Array.from(form.querySelectorAll(INPUTS)).some((input) => U.isVisible(input))) return true;
+    // A code box and its button sit side by side. Inputs elsewhere in the
+    // same section (a newsletter box, another widget) do not count.
+    const isInput = (node) => node && U.isVisible(node) && (node.matches(INPUTS) || (node.matches('label') && node.querySelector(INPUTS)));
+    return isInput(el.previousElementSibling) || isInput(el.nextElementSibling);
+  }
+
+  /**
+   * The button that opens the application on a page that has no form yet,
+   * or null. Never one that belongs to, or sits beside, fields.
+   */
+  function findEntryAction(fields) {
+    if (formLikeFields(fields).length > ENTRY_MAX_FORM_FIELDS) return null;
+    for (const el of U.deepQueryAll(document, ACTION_SELECTOR)) {
+      if (!U.isVisible(el) || isDisabled(el) || el.closest(NOISE_CONTAINER)) continue;
+      if (el.matches('input[type="reset"], button[type="reset"]')) continue;
+      const { text } = actionText(el);
+      if (!text || text.length > 40 || !ENTRY_RE.test(text)) continue;
+      if (attachedToInputs(el)) continue;
+      return { el, text };
+    }
+    return null;
+  }
+
   function summarize(actions) {
     const by = (c) => actions.filter((a) => a.category === c).sort((a, b) => b.score - a.score);
     return { next: by('next'), final: by('final'), back: by('back'), ambiguous: by('ambiguous'), other: by('other') };
@@ -297,6 +342,7 @@
   }
 
   PM.stepDetector = {
+    findEntryAction,
     findActions,
     summarize,
     classify,

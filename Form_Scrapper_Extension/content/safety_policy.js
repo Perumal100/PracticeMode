@@ -73,7 +73,8 @@
   const CONSENT_EXPLANATION =
     'Automatic navigation types fictional sample data into this site and clicks Next/Continue buttons. ' +
     'Even intermediate steps can send that data to the website and may create a draft record. ' +
-    'PracticeMode never clicks Submit, Apply, Pay, or similar final actions, never uploads files, ' +
+    'It may click "Apply" once to open an application form on a page that shows none yet. ' +
+    'PracticeMode never clicks Submit, Pay, or similar final actions, never an "Apply" that sends a form, never uploads files, ' +
     'never fills identity or payment numbers, and never bypasses CAPTCHA or sign-in.';
 
   // Identity-sensitive or financial fields. On production sites these always
