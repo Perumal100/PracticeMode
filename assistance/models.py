@@ -26,6 +26,8 @@ class AssistanceRequest(models.Model):
     requested_slot = models.DateTimeField()
     note = models.TextField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.REQUESTED)
+    meeting_link = models.URLField(max_length=500, blank=True)
+    # An optional note from the instructor (time change, what to prepare).
     meeting_details = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -37,10 +39,32 @@ class AssistanceRequest(models.Model):
                 fields=["attempt"], condition=Q(status__in=["REQUESTED", "SCHEDULED"]), name="one_open_assistance_request_per_attempt",
             ),
             models.CheckConstraint(
-                condition=~Q(status="SCHEDULED") | (Q(instructor__isnull=False) & ~Q(meeting_details="")),
-                name="scheduled_request_has_instructor_and_meeting_details",
+                # Requests scheduled before meeting links existed carry only details.
+                condition=~Q(status="SCHEDULED") | (Q(instructor__isnull=False) & (~Q(meeting_link="") | ~Q(meeting_details=""))),
+                name="scheduled_request_has_instructor_and_meeting",
             ),
             models.CheckConstraint(
                 condition=~Q(status="REQUESTED") | Q(instructor__isnull=True), name="requested_request_is_unassigned",
             ),
         ]
+
+
+class AssistanceEvent(models.Model):
+    """One step in a request's history, for the learner's and the instructor's records."""
+
+    class Action(models.TextChoices):
+        REQUESTED = "REQUESTED", "Requested"
+        SCHEDULED = "SCHEDULED", "Accepted and scheduled"
+        UPDATED = "UPDATED", "Meeting details changed"
+        COMPLETED = "COMPLETED", "Marked as completed"
+        CANCELLED = "CANCELLED", "Cancelled"
+        RELEASED = "RELEASED", "Returned to the queue"
+
+    request = models.ForeignKey(AssistanceRequest, related_name="events", on_delete=models.CASCADE)
+    action = models.CharField(max_length=16, choices=Action.choices)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name="+", on_delete=models.SET_NULL)
+    detail = models.CharField(max_length=500, blank=True)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]

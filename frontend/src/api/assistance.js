@@ -4,6 +4,11 @@ import { apiRequest } from './client.js';
 const BASE = '/api/assistance-requests';
 const one = (requestId) => `${BASE}/${encodeURIComponent(requestId)}`;
 
+// All of the learner's requests, newest first.
+export function listMyRequests() {
+  return apiRequest(BASE);
+}
+
 // A learner's requests for one attempt, newest first.
 export function listAttemptRequests(attemptId) {
   return apiRequest(`${BASE}?attemptId=${encodeURIComponent(attemptId)}`);
@@ -26,8 +31,9 @@ export function getRequest(requestId) {
   return apiRequest(one(requestId));
 }
 
-export function scheduleRequest(requestId, meetingDetails) {
-  return apiRequest(`${one(requestId)}/schedule`, { method: 'PATCH', body: { meetingDetails } });
+// { meetingLink, meetingDetails }: the link the learner joins, and an optional note.
+export function scheduleRequest(requestId, { meetingLink, meetingDetails = '' }) {
+  return apiRequest(`${one(requestId)}/schedule`, { method: 'PATCH', body: { meetingLink, meetingDetails } });
 }
 
 export function completeRequest(requestId) {

@@ -3,8 +3,9 @@ from assistance.models import AssistanceRequest
 
 from .base import URL, AssistanceTestCase
 
-PRIVATE = ("note", "requestedSlot", "meetingDetails", "attemptId", "learnerName", "formTitle")
+PRIVATE = ("note", "requestedSlot", "meetingDetails", "meetingLink", "attemptId", "learnerName", "formTitle", "events")
 MEETING = "Room 204 at the library. Bring your questions."
+LINK = "https://meet.example.test/ines-room"
 
 
 class InstructorRequestTests(AssistanceTestCase):
@@ -14,8 +15,10 @@ class InstructorRequestTests(AssistanceTestCase):
         self.waiting = self.make_request()
         self.taken = self.make_request(self.other_attempt, status="SCHEDULED", instructor=self.users["omar"], meeting_details=MEETING)
 
-    def schedule(self, request, client, details=MEETING):
-        body = {} if details is None else {"meetingDetails": details}
+    def schedule(self, request, client, details=MEETING, link=LINK):
+        body = {"meetingDetails": details} if details is not None else {}
+        if link is not None:
+            body["meetingLink"] = link
         return self.send("patch", f"{URL}/{request.pk}/schedule", body, client=client)
 
     def assert_no_request_data(self, response):
@@ -66,25 +69,46 @@ class InstructorRequestTests(AssistanceTestCase):
         response = self.schedule(self.waiting, self.ines)
         self.assertEqual((response.status_code, response.data["status"], response.data["instructorName"]), (200, "SCHEDULED", "Ines Ortega"))
         self.waiting.refresh_from_db()
-        self.assertEqual((self.waiting.instructor, self.waiting.meeting_details), (self.users["ines"], MEETING))
+        self.assertEqual((self.waiting.instructor, self.waiting.meeting_details, self.waiting.meeting_link), (self.users["ines"], MEETING, LINK))
         # It leaves every other instructor's queue, and the learner sees who accepted.
         self.assertNotIn(str(self.waiting.pk), [row["requestId"] for row in self.omar.get(URL).data])
         self.assertEqual(self.omar.get(f"{URL}/{self.waiting.pk}").status_code, 403)
         learner_view = self.client.get(f"{URL}/{self.waiting.pk}").data
-        self.assertEqual((learner_view["instructorName"], learner_view["meetingDetails"]), ("Ines Ortega", MEETING))
+        self.assertEqual((learner_view["instructorName"], learner_view["meetingDetails"], learner_view["meetingLink"]), ("Ines Ortega", MEETING, LINK))
 
-    def test_accepting_needs_meeting_details(self):
-        for details in (None, "   "):
-            with self.subTest(details=details):
-                response = self.schedule(self.waiting, self.ines, details)
+    def test_accepting_needs_a_meeting_link(self):
+        for link in (None, "not a link", "javascript:alert(1)"):
+            with self.subTest(link=link):
+                response = self.schedule(self.waiting, self.ines, link=link)
                 self.assertEqual(response.status_code, 400)
-                self.assertIn("meetingDetails", response.data)
+                self.assertIn("meetingLink", response.data)
         self.waiting.refresh_from_db()
         self.assertEqual((self.waiting.status, self.waiting.instructor), ("REQUESTED", None))
 
+    def test_the_instructors_default_link_is_used_when_none_is_given(self):
+        from instructors.services import profile_for
+
+        profile = profile_for(self.users["ines"])
+        profile.meeting_link = "https://meet.example.test/ines-default"
+        profile.save()
+        response = self.schedule(self.waiting, self.ines, details=None, link=None)
+        self.assertEqual((response.status_code, response.data["meetingLink"], response.data["meetingDetails"]),
+                         (200, "https://meet.example.test/ines-default", ""))
+
+    def test_history_records_who_did_what(self):
+        self.schedule(self.waiting, self.ines)
+        changed = self.schedule(self.waiting, self.ines, link="https://meet.example.test/new-room")
+        # The reply already carries the new history entry.
+        self.assertEqual(changed.data["events"][-1]["action"], "UPDATED")
+        self.send("post", f"{URL}/{self.waiting.pk}/complete", client=self.ines)
+        events = self.client.get(f"{URL}/{self.waiting.pk}").data["events"]
+        self.assertEqual([(e["action"], e["by"]) for e in events], [("SCHEDULED", "Ines Ortega"), ("UPDATED", "Ines Ortega"), ("COMPLETED", "Ines Ortega")])
+        self.assertEqual(events[1]["detail"], "https://meet.example.test/new-room")
+
     def test_assigned_instructor_can_correct_the_meeting_details(self):
-        response = self.schedule(self.taken, self.omar, "Moved to room 110.")
-        self.assertEqual((response.status_code, response.data["meetingDetails"]), (200, "Moved to room 110."))
+        response = self.schedule(self.taken, self.omar, "Moved to room 110.", link="https://meet.example.test/room-110")
+        self.assertEqual((response.status_code, response.data["meetingDetails"], response.data["meetingLink"]),
+                         (200, "Moved to room 110.", "https://meet.example.test/room-110"))
 
     def test_only_instructors_accept_or_complete_requests(self):
         for name, expected in ((None, 401), ("learner-aaa111", 403), ("reviewer", 403)):

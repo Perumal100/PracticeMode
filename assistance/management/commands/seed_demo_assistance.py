@@ -16,7 +16,9 @@ from django.utils import timezone
 from accounts.identity import INSTRUCTOR, role_for
 from attempts.models import Attempt, ProgressCounter
 
-from ...models import AssistanceRequest
+from instructors.services import profile_for
+
+from ...models import AssistanceEvent, AssistanceRequest
 
 PREFIX = "demo-learner-"
 NOTES = (
@@ -25,6 +27,7 @@ NOTES = (
     "I am not sure which questions I have to answer.",
     "Can someone go through the feedback with me?",
 )
+DEMO_LINK = "https://meet.example.test/practicemode-demo"
 ROOMS = ("Room 204, community centre", "Video call, link sent by the front desk", "Library help desk")
 
 
@@ -49,6 +52,10 @@ class Command(BaseCommand):
         if staff is None or role_for(staff) != INSTRUCTOR:
             self.stdout.write(self.style.WARNING(f"No instructor account named '{instructor}'. Create it first (see the README)."))
             return
+        profile = profile_for(staff)
+        if not profile.meeting_link:
+            profile.meeting_link = DEMO_LINK
+            profile.save(update_fields=["meeting_link"])
         learners = list(get_user_model().objects.filter(username__startswith=PREFIX, practice_attempts__isnull=False).distinct().order_by("username")[:8])
         if not learners:
             self.stdout.write(self.style.WARNING("No demo learners with attempts. Run seed_demo_activity first."))
@@ -71,6 +78,10 @@ class Command(BaseCommand):
                 waiting += 1
             else:
                 request.status, request.instructor, request.meeting_details = AssistanceRequest.Status.SCHEDULED, staff, ROOMS[index % len(ROOMS)]
+                request.meeting_link = profile.meeting_link or DEMO_LINK
                 booked += 1
             request.save()
+            AssistanceEvent.objects.create(request=request, action=AssistanceEvent.Action.REQUESTED, actor=learner)
+            if request.instructor:
+                AssistanceEvent.objects.create(request=request, action=AssistanceEvent.Action.SCHEDULED, actor=staff, detail=request.meeting_link)
         self.stdout.write(self.style.SUCCESS(f"Created {waiting} waiting request(s) and {booked} session(s) booked with '{instructor}'."))

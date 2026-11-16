@@ -12,7 +12,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
 | **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 263 backend · 167 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
+| **Tests** | 280 backend · 180 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -89,6 +89,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - required markers, and progress on required questions
   - autosave with a status under each answer, and an overall "All changes saved" indicator
   - resume after a reload
+- **My sessions:** every help request with the instructor, the meeting link (a "join" link), any note, and its history.
 - **Help while practising:**
   - a hint under any question a reviewer wrote one for (US-12)
   - a guidance language: translated labels and guidance appear beside the original text, and a missing translation is named, never invented (US-09)
@@ -116,11 +117,16 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 
 - **AI drafts of guidance:** **Draft hints with AI** and **Draft translations with AI** fill in what is missing using Gemini, with Groq as the backup. Only the form's questions (labels, answer types, rules, existing hints) are sent, never anything a learner typed. Drafts are marked "AI draft", learners do not see them, and the form cannot be approved until the reviewer approves (as is, or after editing) or discards every draft.
 - **Guidance:** on the review page, each question has a **Hint and translations** button: a hint in the original language and, per language, a translated label and guidance. A sidebar card holds the preparation checklist with fictional examples. Guidance changes no structure, so it stays editable after approval, and learners see changes at once.
+- **Instructors:** approve or decline instructor sign-ups, add an instructor directly (active at once), and remove or restore one. Removing an instructor signs them out and returns their booked sessions to the waiting queue; their history is kept.
+- **Change requests:** instructors' reports of mistakes in published forms, by form and question. Open the form to revise it, then mark the request resolved or declined with an answer the instructor sees.
 - **Learner requests:** each requested page once, with how many learners asked (never who). Importing the page with the extension links the requests automatically; a reviewer can also link one to an existing form or decline it with a reason.
 - **Deleting a form:** removes every version. A form learners have practised is withdrawn instead, keeping their results.
 
 ### For instructors
-- **Assistance requests** (US-05): waiting requests are open to every instructor; accepting one with meeting details books it and hides it from the others. Mark it completed or cancel it afterwards.
+- **Their own account:** instructors request one at `/#/instructor-signup` with their name, a username, a password, a default meeting link and, optionally, their organisation. A Form Reviewer approves it before they can sign in.
+- **Assistance requests** (US-05): waiting requests are open to every instructor. Accepting one fills in the instructor's default meeting link, which they can change for that session, with an optional note; it then disappears from other instructors' queues. Mark it completed, change the meeting, or cancel it afterwards. The default link can be changed at the top of the queue.
+- **Session history:** every request keeps a history (requested, accepted, meeting changed, completed, cancelled, returned to the queue), with who did it and when. The completed and cancelled tabs list past sessions.
+- **Forms and change requests:** a **Forms** page lists published forms and their questions. An instructor can report a mistake in a whole form or one question, from there or from a help request, and sees the Form Reviewer's answer.
 - **Learner progress** (US-22): attempts by learners whose request you accepted, with error and hint-view counts, filtered by unfinished attempts, repeated errors or frequent hint use. Filters stay in the address.
 
 ### Browser extension (form extractor)
@@ -207,7 +213,7 @@ npm run dev
 | --- | --- | --- |
 | Learner | **Create account**: choose a username, a display name and a password (8 or more characters, not only numbers) | Practice forms |
 | Form Reviewer | **Sign in**: `reviewer` / `change-me-123` | Form review dashboard (also `/admin/`) |
-| Instructor | **Sign in**: `instructor` / `change-me-123` | Assistance requests |
+| Instructor | **Sign in**: `instructor` / `change-me-123`, or **Request an instructor account** (`/#/instructor-signup`) and approve it as the reviewer under **Instructors** | Assistance requests |
 
 Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use a private window for the learner so the two sessions stay separate. Learner passwords cannot be recovered without an email address; an administrator can set a new one with `changepassword`.
 
@@ -235,8 +241,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 263 backend tests
-(cd frontend && npm test)                           # 167 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 280 backend tests
+(cd frontend && npm test)                           # 180 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
@@ -259,6 +265,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 | `ProgressCounter.hintViewCount` with no write path | `POST /api/attempts/{id}/hint-views` counts each opened hint | US-22 filters on hint use (Sprint 2, DD-04) |
 | Progress visible for learners with a request assigned to the instructor (DD-02) | Requests in `SCHEDULED` or `COMPLETED` with that instructor; a cancelled session ends the access | A cancelled session should not keep exposing a learner's progress |
 | Guidance is written by people (Sprint 2, DD: "nothing is invented") | A language model may draft hints and translations, but only as drafts a Form Reviewer approves or corrects before learners see them; a form with unreviewed drafts cannot be approved | Imported forms had no guidance and writing it by hand for four languages did not scale. The human check keeps US-09 AC-03 and US-12 AC-03: nothing unreviewed is shown as guidance |
+| Instructor accounts are created by an administrator | Instructors request their own account, which a Form Reviewer approves; reviewers can also add, remove and restore instructors | Requested in Sprint 4. Approval keeps self-registration from opening learner requests and progress to anyone |
+| Accepting a request stores free-text meeting details (API-17) | A meeting link (the instructor's default, changeable per session) plus an optional note, and a history of every step | Requested in Sprint 4 so learners always get a link to join, and both sides have a record of their sessions |
 | Forms are approved or rejected, never deleted | Reviewers can delete a form; one with learner attempts gets the new `WITHDRAWN` status instead | Keeps learners' results while taking the form out of use |
 | Supported input types include RADIO and FILE | Radio groups import as choice lists; file fields are reported and skipped | File uploads (PDF/DOCX checks) are in the backlog |
 
@@ -368,6 +376,21 @@ The form detail (`GET /api/forms/{formId}`) now also returns `version`, `replace
 
 Requests and progress show the learner's display name and username (`learnerCode`), never answers.
 
+#### Instructor accounts and change requests
+
+| Method | Path | Caller | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/instructor-signup` | Anyone (CSRF) | `{username, fullName, password, meetingLink, organisation?}`; `201`, status `PENDING`. Signing in before approval returns `403 INSTRUCTOR_PENDING` (`INSTRUCTOR_DECLINED`, `INSTRUCTOR_REMOVED` likewise) |
+| `GET` / `PATCH` | `/api/instructor/profile` | Instructor | Own name, organisation and default `meetingLink` |
+| `GET` | `/api/instructor/forms`, `/api/instructor/forms/{formId}` | Instructor | Published forms and their questions |
+| `GET` / `POST` | `/api/instructor/change-requests` | Instructor | Own reports; `{formId, fieldId?, description}` reports a mistake in a published form |
+| `GET` / `POST` | `/api/review/instructors?status=` | Form Reviewer | List instructors; `POST` adds one, active at once |
+| `POST` | `/api/review/instructors/{userId}/{approve,decline,remove,restore}` | Form Reviewer | `{note?}`. The `INSTRUCTOR` role exists only while active; removing returns their booked sessions to the queue |
+| `GET` | `/api/review/change-requests?status=` | Form Reviewer | `OPEN`, `RESOLVED` or `DECLINED` reports |
+| `POST` | `/api/review/change-requests/{id}/{resolve,decline}` | Form Reviewer | `{response}`, shown to the instructor |
+
+Accepting a help request (`PATCH /api/assistance-requests/{id}/schedule`) now takes `{meetingLink, meetingDetails?}`; without `meetingLink` the instructor's default link is used, and with neither it returns `400`. Every request carries `meetingLink` and an `events` history: `{action, label, by, detail, at}`.
+
 #### Form requests (US-15)
 
 | Method | Path | Caller | Purpose |
@@ -458,6 +481,7 @@ Sprint 4 adds three apps:
 
 - `guidance`: `Hint` and `Translation` (one per field and language; a missing row means no guidance, never invented text) and `ChecklistItem` (one per form and position). Form Reviewers write them on the review page; `seed_guidance` adds demo content. Revising a form copies its guidance.
 - `assistance`: `AssistanceRequest` (attempt, learner, optional instructor, requested slot, note, status, meeting details). Database constraints allow one open request per attempt, require an instructor and meeting details when `SCHEDULED`, and keep `REQUESTED` rows unassigned.
+- `instructors`: `InstructorProfile` (one per instructor: default meeting link, organisation, status `PENDING`/`ACTIVE`/`DECLINED`/`REMOVED`, who decided and when) and `FormChangeRequest` (form, optional question with its label kept as text, instructor, description, status, the reviewer's answer). `AssistanceRequest` gains `meeting_link`, and `AssistanceEvent` records each step of a request.
 - `form_requests`: `FormRequest` (learner, URL, page key, note, status `OPEN`/`LINKED`/`DECLINED`, optional form, decline reason). Deleting a form clears the link.
 
 `PracticeForm.status` gains `WITHDRAWN`.

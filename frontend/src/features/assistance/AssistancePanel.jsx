@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { formatDateTime } from '@/lib/format.js';
 import * as defaultApi from '../../api/assistance.js';
 import { RequestStatus, isOpen } from './RequestStatus.jsx';
+import { MeetingLink } from './SessionTimeline.jsx';
 
 const NOTE_LIMIT = 1000;
 const CLOSED_TEXT = { COMPLETED: 'Your last session is marked as completed.', CANCELLED: 'Your last request was cancelled.' };
@@ -110,7 +111,8 @@ export default function AssistancePanel({ attemptId, api = {}, now = Date.now })
         <dl className="space-y-2 text-[13px]">
           <div><dt className="text-muted-foreground">Requested time</dt><dd>{formatDateTime(request.requestedSlot)}</dd></div>
           {scheduled && <div><dt className="text-muted-foreground">Instructor</dt><dd>{request.instructorName || 'An instructor'}</dd></div>}
-          {scheduled && <div><dt className="text-muted-foreground">Meeting details</dt><dd className="whitespace-pre-wrap break-words">{request.meetingDetails}</dd></div>}
+          {scheduled && request.meetingLink && <div><dt className="text-muted-foreground">Meeting link</dt><dd><MeetingLink href={request.meetingLink} /></dd></div>}
+          {scheduled && request.meetingDetails && <div><dt className="text-muted-foreground">Note from the instructor</dt><dd className="whitespace-pre-wrap break-words">{request.meetingDetails}</dd></div>}
           <div><dt className="text-muted-foreground">Your note</dt><dd className="whitespace-pre-wrap break-words">{request.note}</dd></div>
         </dl>
         {state.status === 'error' && <p className="text-[13px] text-destructive">The status could not be refreshed.</p>}
