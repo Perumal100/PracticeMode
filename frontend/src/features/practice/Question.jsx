@@ -5,11 +5,15 @@ import { useState } from 'react';
 import { Label } from '@/components/ui/input.jsx';
 import { cn } from '@/lib/utils';
 import FieldInput from './FieldInput.jsx';
-import { hintFor } from './guidance.js';
+import { ORIGINAL_LANGUAGE, guidanceFor } from './guidance.js';
 
-export default function Question({ field, number, value, disabled, messages = [], onChange, onBlur, onHintOpen, children }) {
+// `language` is { code, name, partial }: partial means the form has some, but not all, content in it.
+export default function Question({ field, number, value, disabled, messages = [], language, onChange, onBlur, onHintOpen, children }) {
   const [hintOpen, setHintOpen] = useState(false);
-  const hint = hintFor(field);
+  const code = language?.code ?? ORIGINAL_LANGUAGE;
+  const translating = code !== ORIGINAL_LANGUAGE;
+  const guidance = guidanceFor(field, code);
+  const hint = guidance.hasGuidance;
   const hintId = `hint-${field.id}`;
   const feedbackId = messages.length ? `feedback-${field.id}` : undefined;
   const describedBy = [hint && hintOpen && hintId, feedbackId].filter(Boolean).join(' ') || undefined;
@@ -21,6 +25,9 @@ export default function Question({ field, number, value, disabled, messages = []
     <Label htmlFor={`field-${field.id}`} className={cn('leading-5', isCheckbox && 'cursor-pointer')}>
       {field.label}
       {field.required && <span className="text-destructive"> *<span className="sr-only"> (required)</span></span>}
+      {/* US-09: the translation sits under the original label, never in its place. */}
+      {guidance.translatedLabel && <span lang={code} dir="auto" className="mt-1 block text-[13px] font-normal leading-5 text-muted-foreground">{guidance.translatedLabel}</span>}
+      {translating && !guidance.translatedLabel && language.partial && <span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">Not translated into {language.name}</span>}
     </Label>
   );
 
@@ -59,7 +66,16 @@ export default function Question({ field, number, value, disabled, messages = []
       </div>
       <div className="flex flex-col gap-1 pl-7 empty:hidden [&>*:first-child]:mt-2">
         {hint && hintOpen && (
-          <p id={hintId} className="rounded-md bg-accent-soft px-3 py-2 text-[13px] leading-relaxed text-accent-soft-foreground">{hint.text}</p>
+          <div id={hintId} className="space-y-1.5 rounded-md bg-accent-soft px-3 py-2 text-[13px] leading-relaxed text-accent-soft-foreground">
+            {guidance.translated.map((text) => <p key={text} lang={code} dir="auto">{text}</p>)}
+            {translating && guidance.translated.length === 0 && <p className="font-medium">Not available in {language.name} yet. This is the original guidance.</p>}
+            {guidance.originalHint && (
+              <p lang={ORIGINAL_LANGUAGE}>
+                {translating && guidance.translated.length > 0 && <span className="font-medium">Original: </span>}
+                {guidance.originalHint}
+              </p>
+            )}
+          </div>
         )}
         {children}
         {messages.length > 0 && (

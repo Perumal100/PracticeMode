@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from guidance.serializers import HintSerializer
+from guidance.serializers import HintSerializer, TranslationSerializer, guidance_languages
 from reviewer.models import FormField, PracticeForm
 
 
@@ -36,14 +36,19 @@ class FormSummarySerializer(serializers.ModelSerializer):
 
 class FormFieldSerializer(serializers.ModelSerializer):
     hints = HintSerializer(many=True, read_only=True)
+    translations = TranslationSerializer(many=True, read_only=True)
 
     class Meta:
         model = FormField
-        fields = ("id", "position", "label", "input_type", "required", "validation", "hints")
+        fields = ("id", "position", "label", "input_type", "required", "validation", "hints", "translations")
 
 
 class FormDetailSerializer(FormSummarySerializer):
     fields = FormFieldSerializer(many=True, read_only=True)
+    guidance_languages = serializers.SerializerMethodField()
 
     class Meta(FormSummarySerializer.Meta):
-        fields = (*FormSummarySerializer.Meta.fields, "fields")
+        fields = (*FormSummarySerializer.Meta.fields, "guidance_languages", "fields")
+
+    def get_guidance_languages(self, form):
+        return guidance_languages()
