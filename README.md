@@ -12,7 +12,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
 | **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 241 backend · 153 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
+| **Tests** | 248 backend · 161 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -114,6 +114,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - a per-form table, and for each form, the questions learners get wrong most often and which rule they broke, plus the median time to submit
   - an approved form's review page links straight to its insights
 
+- **Guidance:** on the review page, each question has a **Hint and translations** button: a hint in the original language and, per language, a translated label and guidance. A sidebar card holds the preparation checklist with fictional examples. Guidance changes no structure, so it stays editable after approval, and learners see changes at once.
 - **Learner requests:** each requested page once, with how many learners asked (never who). Importing the page with the extension links the requests automatically; a reviewer can also link one to an existing form or decline it with a reason.
 - **Deleting a form:** removes every version. A form learners have practised is withdrawn instead, keeping their results.
 
@@ -233,8 +234,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 241 backend tests
-(cd frontend && npm test)                           # 153 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 248 backend tests
+(cd frontend && npm test)                           # 161 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
@@ -390,6 +391,8 @@ Requests are matched by page: scheme, host and path, ignoring the query string, 
 | `PUT` | `/api/review/forms/{formId}/fields/order` | `{"fieldIds": [...]}` puts the fields in the source's order |
 | `POST` | `/api/review/forms/{formId}/preview-check` | `{"answers": {fieldId: value}}` returns the `validationFeedback` a learner would get; nothing is saved |
 | `POST` | `/api/review/forms/{formId}/revisions` | Start revising an approved form: returns a pending copy (`201`), or `409` with `formId` when a copy from that source already awaits review |
+| `PUT` | `/api/review/forms/{formId}/fields/{fieldId}/guidance` | `{hint, translations: [{language_code, translated_label, guidance_text}]}` replaces a question's hint and translations; blank removes them. Pending or approved forms only (`409 GUIDANCE_LOCKED` otherwise) |
+| `PUT` | `/api/review/forms/{formId}/checklist` | `{items: [{description, fictional_example}]}` replaces the preparation checklist, in order |
 | `DELETE` | `/api/review/forms/{formId}` | Delete the form and all its versions (`{"outcome": "DELETED"}`), or withdraw them when learners practised any (`{"outcome": "WITHDRAWN"}`). Already withdrawn: `409` |
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
 | `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
@@ -448,7 +451,7 @@ extracted fields, source information, and lifecycle status are outside this endp
 
 Sprint 4 adds three apps:
 
-- `guidance`: `Hint` and `Translation` (one per field and language; a missing row means no guidance, never invented text) and `ChecklistItem` (one per form and position). Revising a form copies its guidance.
+- `guidance`: `Hint` and `Translation` (one per field and language; a missing row means no guidance, never invented text) and `ChecklistItem` (one per form and position). Form Reviewers write them on the review page; `seed_guidance` adds demo content. Revising a form copies its guidance.
 - `assistance`: `AssistanceRequest` (attempt, learner, optional instructor, requested slot, note, status, meeting details). Database constraints allow one open request per attempt, require an instructor and meeting details when `SCHEDULED`, and keep `REQUESTED` rows unassigned.
 - `form_requests`: `FormRequest` (learner, URL, page key, note, status `OPEN`/`LINKED`/`DECLINED`, optional form, decline reason). Deleting a form clears the link.
 

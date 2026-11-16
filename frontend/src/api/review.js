@@ -54,3 +54,13 @@ export function reviseForm(formId) {
 export function deleteForm(formId) {
   return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}`, { method: 'DELETE' });
 }
+
+// Guidance a reviewer writes (US-12 hints, US-09 translations, US-18 checklist).
+// Each call replaces what was there; editable while pending or approved.
+export function saveFieldGuidance(formId, fieldId, { hint, translations }) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/fields/${encodeURIComponent(fieldId)}/guidance`, { method: 'PUT', body: { hint, translations } });
+}
+
+export function saveChecklist(formId, items) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/checklist`, { method: 'PUT', body: { items } });
+}

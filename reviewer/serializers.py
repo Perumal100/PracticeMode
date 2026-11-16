@@ -2,6 +2,8 @@ import math
 
 from rest_framework import serializers
 
+from guidance.serializers import guidance_languages
+
 from .models import FormField, FormStatus, PracticeForm, ReviewDecision, ReviewNotification
 
 
@@ -9,6 +11,23 @@ class FormFieldSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormField
         fields = ("id", "position", "label", "input_type", "required", "validation")
+
+
+class ReviewFieldSerializer(FormFieldSerializer):
+    """A field as the reviewer sees it, with the guidance written for it."""
+
+    hints = serializers.SerializerMethodField()
+    translations = serializers.SerializerMethodField()
+
+    class Meta(FormFieldSerializer.Meta):
+        fields = (*FormFieldSerializer.Meta.fields, "hints", "translations")
+
+    def get_hints(self, field):
+        return [{"language_code": h.language_code, "text": h.text} for h in field.hints.all()]
+
+    def get_translations(self, field):
+        return [{"language_code": t.language_code, "translated_label": t.translated_label, "guidance_text": t.guidance_text}
+                for t in field.translations.all()]
 
 
 class PracticeFormQueueSerializer(serializers.ModelSerializer):
@@ -20,7 +39,9 @@ class PracticeFormQueueSerializer(serializers.ModelSerializer):
 
 
 class PracticeFormDetailSerializer(serializers.ModelSerializer):
-    fields = FormFieldSerializer(many=True, read_only=True)
+    fields = ReviewFieldSerializer(many=True, read_only=True)
+    checklist = serializers.SerializerMethodField()
+    guidance_languages = serializers.SerializerMethodField()
     decision = serializers.SerializerMethodField()
     open_revision = serializers.SerializerMethodField()
     replaced_by = serializers.SerializerMethodField()
@@ -30,7 +51,15 @@ class PracticeFormDetailSerializer(serializers.ModelSerializer):
         fields = (
             "id", "title", "source_url", "source_available", "categories", "failure_reason", "status",
             "created_at", "updated_at", "fields", "decision", "revision_of", "open_revision", "replaced_by",
+            "checklist", "guidance_languages",
         )
+
+    def get_checklist(self, obj):
+        return [{"position": i.position, "description": i.description, "fictional_example": i.fictional_example}
+                for i in obj.checklist_items.all()]
+
+    def get_guidance_languages(self, obj):
+        return guidance_languages()
 
     def get_open_revision(self, obj):
         revision = obj.revisions.filter(status=FormStatus.AWAITING_REVIEW).first()

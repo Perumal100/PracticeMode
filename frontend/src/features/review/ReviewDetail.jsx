@@ -1,7 +1,7 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Eye, Gavel, History, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ClipboardList, ExternalLink, Eye, Gavel, History, Languages, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -25,11 +25,15 @@ import {
   getReviewForm as defaultGetReviewForm,
   reorderFields as defaultReorderFields,
   reviseForm as defaultReviseForm,
+  saveChecklist as defaultSaveChecklist,
+  saveFieldGuidance as defaultSaveFieldGuidance,
   updateField as defaultUpdateField,
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
 import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
+import ChecklistEditor from './ChecklistEditor.jsx';
 import FormPreview from './FormPreview.jsx';
+import GuidanceEditor, { GuidanceSummary } from './GuidanceEditor.jsx';
 import { reviewErrorMessage } from './ReviewQueue.jsx';
 
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES);
@@ -228,6 +232,9 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
   const reorderFields = api.reorderFields ?? defaultReorderFields;
   const reviseForm = api.reviseForm ?? defaultReviseForm;
   const deleteForm = api.deleteForm ?? defaultDeleteForm;
+  const saveFieldGuidance = api.saveFieldGuidance ?? defaultSaveFieldGuidance;
+  const saveChecklist = api.saveChecklist ?? defaultSaveChecklist;
+  const [guidanceFor, setGuidanceFor] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
   const [editingDetails, setEditingDetails] = useState(false);
@@ -290,6 +297,25 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       if (err?.body?.error === 'REVISION_PENDING') onOpenForm?.(err.body.formId);
       else setError(err?.status === 409 ? 'Only approved forms can be revised. Reload to see the current status.' : reviewErrorMessage(err));
     }
+  }
+
+  async function saveGuidance(field, guidance) {
+    const saved = await saveFieldGuidance(formId, field.id, guidance);
+    setForm((current) => ({
+      ...current,
+      data: {
+        ...current.data,
+        fields: current.data.fields.map((f) => (f.id === field.id
+          ? { ...f, hints: saved.hint ? [{ language_code: 'en', text: saved.hint }] : [], translations: saved.translations }
+          : f)),
+      },
+    }));
+    toast.success(`Guidance saved for "${field.label}".`);
+  }
+
+  async function storeChecklist(items) {
+    const checklist = await saveChecklist(formId, items);
+    setForm((current) => ({ ...current, data: { ...current.data, checklist } }));
   }
 
   async function remove() {
@@ -379,6 +405,9 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
 
   const data = form.data;
   const pending = data.status === 'AWAITING_REVIEW';
+  // Guidance changes no structure, so it stays editable after approval.
+  const guidanceEditable = pending || data.status === 'APPROVED';
+  const showActions = pending || guidanceEditable;
   const required = data.fields.filter((f) => f.required).length;
   return (
     <>
@@ -474,7 +503,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                   <TableHead className="w-10">#</TableHead>
                   <TableHead>Question and rules</TableHead>
                   <TableHead className="w-36">Answer</TableHead>
-                  {pending && <TableHead className="w-px"><span className="sr-only">Actions</span></TableHead>}
+                  {showActions && <TableHead className="w-px"><span className="sr-only">Actions</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -484,6 +513,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                     <TableCell className="min-w-48 align-top">
                       <p className="font-medium leading-snug">{field.label}</p>
                       <div className="mt-1 text-[13px] text-muted-foreground empty:hidden"><RuleSummary field={field} /></div>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Languages className="size-3.5" /><GuidanceSummary field={field} languages={data.guidance_languages} /></p>
                     </TableCell>
                     <TableCell className="align-top">
                       <div className="flex flex-col items-start gap-1">
@@ -493,13 +523,16 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                           : <span className="text-xs text-muted-foreground">Optional</span>}
                       </div>
                     </TableCell>
-                    {pending && (
+                    {showActions && (
                       <TableCell className="whitespace-nowrap py-2 text-right align-top">
                         <div className="inline-flex items-center">
+                          {guidanceEditable && <Button variant="ghost" size="icon" className="size-7" onClick={() => setGuidanceFor(field)} aria-label={`Hint and translations for ${field.label}`} title="Hint and translations"><Languages /></Button>}
+                          {pending && (<>
                           <Button variant="ghost" size="icon" className="size-7" disabled={moving || index === 0} onClick={() => move(index, -1)} aria-label={`Move ${field.label} up`}><ArrowUp /></Button>
                           <Button variant="ghost" size="icon" className="size-7" disabled={moving || index === data.fields.length - 1} onClick={() => move(index, 1)} aria-label={`Move ${field.label} down`}><ArrowDown /></Button>
                           <Button variant="ghost" size="icon" className="size-7" onClick={() => setFieldEditor({ open: true, field })} aria-label={`Edit ${field.label}`}><Pencil /></Button>
                           <Button variant="ghost" size="icon" className="size-7 text-destructive hover:bg-destructive-soft" disabled={data.fields.length === 1} onClick={() => setToDelete(field)} aria-label={`Remove ${field.label}`}><Trash2 /></Button>
+                          </>)}
                         </div>
                       </TableCell>
                     )}
@@ -569,9 +602,35 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center gap-2">
+              <ClipboardList className="size-4 text-muted-foreground" />
+              <CardTitle>Preparation checklist</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {guidanceEditable ? (
+                <>
+                  <p className="mb-3 text-[13px] text-muted-foreground">What a learner should have ready before starting. Learners see every example labelled as fictional.</p>
+                  <ChecklistEditor key={data.id} initial={data.checklist ?? []} onSave={storeChecklist} />
+                </>
+              ) : (data.checklist ?? []).length ? (
+                <ol className="list-decimal space-y-1 pl-5 text-sm">{data.checklist.map((item) => <li key={item.position}>{item.description}</li>)}</ol>
+              ) : (
+                <p className="text-sm text-muted-foreground">No checklist.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
+      <GuidanceEditor
+        field={guidanceFor}
+        languages={data.guidance_languages}
+        open={guidanceFor !== null}
+        onOpenChange={(open) => !open && setGuidanceFor(null)}
+        onSave={(guidance) => saveGuidance(guidanceFor, guidance)}
+      />
       <FormPreview form={data} open={previewing} onOpenChange={setPreviewing} check={api.checkPreviewAnswers} />
 
       <FieldEditor open={fieldEditor.open} field={fieldEditor.field} onOpenChange={(open) => setFieldEditor((f) => ({ ...f, open }))} onSave={saveField} />
