@@ -10,7 +10,7 @@ from django.db import transaction
 
 from reviewer.models import PracticeForm
 
-from ...models import Hint, Translation
+from ...models import ChecklistItem, Hint, Translation
 
 # The housing form is translated into Spanish and, in part, Chinese. The
 # education form has no translations, to show what a learner sees then.
@@ -47,6 +47,17 @@ GUIDANCE = {
 }
 
 
+# Only the housing form has a checklist; the course form shows the empty case.
+CHECKLISTS = {
+    "housing": [
+        ("A photo ID, such as a passport or driving licence", "Sample licence number D000-0000-0000"),
+        ("Your current address and the date you moved in", "12 Sample Street, Apt 4, Springfield"),
+        ("An email address you check often", "jordan@example.test"),
+        ("The date you would like to move", ""),
+    ],
+}
+
+
 def demo_form(key):
     form_id = uuid.uuid5(uuid.NAMESPACE_URL, f"https://example.test/practicemode-demo/{key}")
     # A revised demo form keeps its guidance under the newest version.
@@ -54,7 +65,7 @@ def demo_form(key):
 
 
 class Command(BaseCommand):
-    help = "Add fictional hints and translations to the demo forms."
+    help = "Add fictional hints, translations and a preparation checklist to the demo forms."
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -76,5 +87,10 @@ class Command(BaseCommand):
                         field=field, language_code=code,
                         defaults={"translated_label": label_text, "guidance_text": guidance_text},
                     )
+            for position, (description, example) in enumerate(CHECKLISTS.get(key, []), start=1):
+                ChecklistItem.objects.update_or_create(
+                    practice_form=form, position=position,
+                    defaults={"description": description, "fictional_example": example},
+                )
             seeded += 1
         self.stdout.write(self.style.SUCCESS(f"Guidance is in place on {seeded} demo form(s)."))

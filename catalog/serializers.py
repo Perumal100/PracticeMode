@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from guidance.serializers import HintSerializer, TranslationSerializer, guidance_languages
+from guidance.serializers import ChecklistItemSerializer, HintSerializer, TranslationSerializer, guidance_languages
 from reviewer.models import FormField, PracticeForm
 
 
@@ -46,9 +46,11 @@ class FormFieldSerializer(serializers.ModelSerializer):
 class FormDetailSerializer(FormSummarySerializer):
     fields = FormFieldSerializer(many=True, read_only=True)
     guidance_languages = serializers.SerializerMethodField()
+    # US-18: an empty list means no checklist was defined; nothing is made up.
+    checklist = ChecklistItemSerializer(source="checklist_items", many=True, read_only=True)
 
     class Meta(FormSummarySerializer.Meta):
-        fields = (*FormSummarySerializer.Meta.fields, "guidance_languages", "fields")
+        fields = (*FormSummarySerializer.Meta.fields, "guidance_languages", "checklist", "fields")
 
     def get_guidance_languages(self, form):
         return guidance_languages()
