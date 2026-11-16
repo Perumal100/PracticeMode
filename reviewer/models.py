@@ -11,6 +11,7 @@ class FormStatus(models.TextChoices):
     REJECTED = "REJECTED", "Rejected"
     FAILED = "FAILED", "Failed"
     SUPERSEDED = "SUPERSEDED", "Replaced by a revision"
+    WITHDRAWN = "WITHDRAWN", "Removed by a reviewer"
 
 
 class PracticeForm(models.Model):

@@ -14,7 +14,12 @@ import { formatDateTime } from '@/lib/format.js';
 import { listMyAttempts as defaultListMyAttempts } from '../../api/attempts.js';
 
 const HEAD = 'normal-case tracking-normal';
-const FORM_NOTE = { SUPERSEDED: 'An older version; the form has since been updated', WITHDRAWN: 'Removed from the catalog' };
+const FORM_NOTE = { SUPERSEDED: 'since updated to a newer version', WITHDRAWN: 'removed by a Form Reviewer' };
+
+function formNote(attempt) {
+  const parts = [attempt.formVersion && `Version ${attempt.formVersion}`, FORM_NOTE[attempt.formStatus]].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
 
 function Result({ attempt }) {
   if (attempt.status !== 'COMPLETED') return <span className="text-muted-foreground">{attempt.answeredCount} answered so far</span>;
@@ -77,7 +82,7 @@ export default function PracticeHistory({ onOpen, onBrowse, listMyAttempts = def
                   <TableRow key={attempt.id}>
                     <TableCell>
                       <span className="font-medium">{attempt.formTitle}</span>
-                      {FORM_NOTE[attempt.formStatus] && <span className="block text-xs text-muted-foreground">{FORM_NOTE[attempt.formStatus]}</span>}
+                      {formNote(attempt) && <span className="block text-xs text-muted-foreground">{formNote(attempt)}</span>}
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">{formatDateTime(attempt.startedAt)}</TableCell>
                     <TableCell><StatusBadge status={attempt.status} /></TableCell>

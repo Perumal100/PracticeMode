@@ -155,3 +155,30 @@ describe('buildFieldPayload', () => {
     expect(buildFieldPayload(draft({ inputType: 'number', min: '10', max: '1' })).error).toMatch(/larger/);
   });
 });
+
+describe('Deleting a form', () => {
+  const approved = {
+    id: 'f9', title: 'Warehouse application', status: 'APPROVED', source_url: 'https://example.test/w', source_available: true,
+    categories: [], created_at: '2026-11-03T09:00:00Z', updated_at: '2026-11-03T09:00:00Z', fields: [], decision: null,
+    revision_of: null, open_revision: null, replaced_by: null,
+  };
+
+  it('asks first, then deletes and goes back to the queue', async () => {
+    const onBack = vi.fn();
+    const deleteForm = vi.fn().mockResolvedValue({ outcome: 'WITHDRAWN' });
+    render(<ReviewDetail formId="f9" onBack={onBack} api={{ getReviewForm: vi.fn().mockResolvedValue(approved), deleteForm }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete form' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog).toHaveTextContent('they keep their attempts and results');
+    expect(deleteForm).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete form' }));
+    await waitFor(() => expect(deleteForm).toHaveBeenCalledWith('f9'));
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
+  });
+
+  it('a removed form offers no delete and says it was removed', async () => {
+    render(<ReviewDetail formId="f9" onBack={() => {}} api={{ getReviewForm: vi.fn().mockResolvedValue({ ...approved, status: 'WITHDRAWN' }) }} />);
+    expect(await screen.findByText(/This form was removed/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Delete form' })).not.toBeInTheDocument();
+  });
+});

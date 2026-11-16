@@ -5,7 +5,7 @@ import PracticeHistory from '../PracticeHistory.jsx';
 
 const history = [
   { id: 'a2', formId: 'f1', formTitle: 'Housing application', formStatus: 'APPROVED', status: 'IN_PROGRESS', startedAt: '2026-11-16T10:00:00Z', answeredCount: 2, issueCount: null },
-  { id: 'a1', formId: 'f0', formTitle: 'Housing application', formStatus: 'SUPERSEDED', status: 'COMPLETED', startedAt: '2026-11-10T10:00:00Z', answeredCount: 3, issueCount: 1 },
+  { id: 'a1', formId: 'f0', formTitle: 'Housing application', formStatus: 'SUPERSEDED', formVersion: 1, status: 'COMPLETED', startedAt: '2026-11-10T10:00:00Z', answeredCount: 3, issueCount: 1 },
   { id: 'a0', formId: 'f9', formTitle: 'Course registration', formStatus: 'APPROVED', status: 'COMPLETED', startedAt: '2026-11-09T10:00:00Z', answeredCount: 3, issueCount: 0 },
 ];
 
@@ -17,7 +17,7 @@ describe('PracticeHistory', () => {
     expect(rows).toHaveLength(3);
     expect(within(rows[0]).getByText('2 answered so far')).toBeVisible();
     expect(within(rows[1]).getByText('1 answer needed attention')).toBeVisible();
-    expect(within(rows[1]).getByText('An older version; the form has since been updated')).toBeVisible();
+    expect(within(rows[1]).getByText('Version 1, since updated to a newer version')).toBeVisible();
     expect(within(rows[2]).getByText('No problems found')).toBeVisible();
     fireEvent.click(within(rows[1]).getByRole('button', { name: /View result: Housing application/ }));
     expect(onOpen).toHaveBeenCalledWith(history[1]);

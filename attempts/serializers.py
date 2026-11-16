@@ -2,6 +2,8 @@ from collections.abc import Mapping
 
 from rest_framework import serializers
 
+from reviewer.lineage import version_number
+
 from .models import Answer, Attempt
 
 
@@ -65,6 +67,7 @@ class HistorySerializer(serializers.ModelSerializer):
     formId = serializers.UUIDField(source="practice_form_id")
     formTitle = serializers.CharField(source="practice_form.title")
     formStatus = serializers.CharField(source="practice_form.status")
+    formVersion = serializers.SerializerMethodField()
     startedAt = serializers.DateTimeField(source="started_at")
     lastSavedAt = serializers.DateTimeField(source="last_saved_at")
     completedAt = serializers.DateTimeField(source="completed_at")
@@ -73,8 +76,11 @@ class HistorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Attempt
-        fields = ("id", "formId", "formTitle", "formStatus", "status", "startedAt", "lastSavedAt", "completedAt",
+        fields = ("id", "formId", "formTitle", "formStatus", "formVersion", "status", "startedAt", "lastSavedAt", "completedAt",
                   "answeredCount", "issueCount")
+
+    def get_formVersion(self, attempt):
+        return version_number(attempt.practice_form)
 
     def get_issueCount(self, attempt):
         return len(attempt.validation_feedback) if attempt.status == Attempt.Status.COMPLETED else None

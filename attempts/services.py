@@ -10,6 +10,13 @@ from .models import Answer, Attempt, ProgressCounter
 from .validation import check_schema, validate_draft, validation_feedback
 
 
+def _open_for_answers(attempt):
+    if attempt.status == Attempt.Status.COMPLETED:
+        raise AttemptError("ATTEMPT_COMPLETED", "Completed attempts cannot be edited.", 409)
+    if attempt.practice_form.status == FormStatus.WITHDRAWN:
+        raise AttemptError("FORM_REMOVED", "A Form Reviewer removed this form. Your saved answers are kept.", 409)
+
+
 def _owned_attempt(learner, attempt_id, lock=False):
     attempts = Attempt.objects.select_for_update() if lock else Attempt.objects.all()
     try:
@@ -53,8 +60,7 @@ def save_answer(learner, attempt_id, field_id, value):
     try:
         with transaction.atomic():
             attempt = _owned_attempt(learner, attempt_id, lock=True)
-            if attempt.status == Attempt.Status.COMPLETED:
-                raise AttemptError("ATTEMPT_COMPLETED", "Completed attempts cannot be edited.", 409)
+            _open_for_answers(attempt)
             try:
                 field = FormField.objects.get(pk=field_id)
             except FormField.DoesNotExist:
@@ -77,6 +83,7 @@ def complete_attempt(learner, attempt_id):
             attempt = _owned_attempt(learner, attempt_id, lock=True)
             if attempt.status == Attempt.Status.COMPLETED:
                 return attempt, False
+            _open_for_answers(attempt)
             fields = list(attempt.practice_form.fields.all())
             answers = dict(attempt.answers.values_list("field_id", "value"))
             attempt.validation_feedback = validation_feedback(fields, answers)

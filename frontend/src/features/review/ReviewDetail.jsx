@@ -21,6 +21,7 @@ import {
   addField as defaultAddField,
   decideForm as defaultDecideForm,
   deleteField as defaultDeleteField,
+  deleteForm as defaultDeleteForm,
   getReviewForm as defaultGetReviewForm,
   reorderFields as defaultReorderFields,
   reviseForm as defaultReviseForm,
@@ -226,6 +227,8 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
   const deleteField = api.deleteField ?? defaultDeleteField;
   const reorderFields = api.reorderFields ?? defaultReorderFields;
   const reviseForm = api.reviseForm ?? defaultReviseForm;
+  const deleteForm = api.deleteForm ?? defaultDeleteForm;
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
   const [editingDetails, setEditingDetails] = useState(false);
   const [fieldEditor, setFieldEditor] = useState({ open: false, field: null });
@@ -286,6 +289,22 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       setBusy(false);
       if (err?.body?.error === 'REVISION_PENDING') onOpenForm?.(err.body.formId);
       else setError(err?.status === 409 ? 'Only approved forms can be revised. Reload to see the current status.' : reviewErrorMessage(err));
+    }
+  }
+
+  async function remove() {
+    setConfirmRemove(false);
+    setError(null);
+    setBusy(true);
+    try {
+      const { outcome } = await deleteForm(formId);
+      toast.success(outcome === 'WITHDRAWN'
+        ? 'Form removed. Learners who practised it keep their attempts and results.'
+        : 'Form deleted.');
+      onBack();
+    } catch (err) {
+      setBusy(false);
+      setError(err?.status === 409 ? 'This form has already been removed.' : reviewErrorMessage(err));
     }
   }
 
@@ -377,11 +396,15 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
             {['APPROVED', 'SUPERSEDED'].includes(data.status) && onInsights && (
               <Button variant="outline" onClick={() => onInsights(data.id)}><BarChart3 />Practice insights</Button>
             )}
+            {data.status !== 'WITHDRAWN' && (
+              <Button variant="ghost" className="text-destructive" disabled={busy} onClick={() => setConfirmRemove(true)}><Trash2 />Delete form</Button>
+            )}
           </>
         )}
       />
 
       {error && <Alert variant="destructive" className="mb-6"><AlertCircle />{error}</Alert>}
+      {data.status === 'WITHDRAWN' && <Alert variant="warning" className="mb-6"><AlertTriangle />This form was removed. Learners cannot start it; those who practised it keep their results.</Alert>}
       {data.revision_of && pending && (
         <VersionNotice
           title="This is a revision of a published form"
@@ -562,6 +585,22 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
           <AlertDialogFooter>
             <AlertDialogCancel>Keep field</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => removeField(toDelete)}>Remove field</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{data.title}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every version of this form leaves PracticeMode. If learners have practised any version, it is removed from the catalog
+              and the review queue instead, and they keep their attempts and results. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep form</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove}>Delete form</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -48,3 +48,9 @@ export function checkPreviewAnswers(formId, answers) {
 export function reviseForm(formId) {
   return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/revisions`, { method: 'POST' });
 }
+
+// Deletes a form and all its versions; a form learners practised is withdrawn instead.
+// Resolves to { outcome: 'DELETED' | 'WITHDRAWN' }.
+export function deleteForm(formId) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}`, { method: 'DELETE' });
+}

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from guidance.serializers import ChecklistItemSerializer, HintSerializer, TranslationSerializer, guidance_languages
+from reviewer.lineage import version_number
 from reviewer.models import FormField, PracticeForm
 
 
@@ -49,8 +50,18 @@ class FormDetailSerializer(FormSummarySerializer):
     # US-18: an empty list means no checklist was defined; nothing is made up.
     checklist = ChecklistItemSerializer(source="checklist_items", many=True, read_only=True)
 
+    version = serializers.SerializerMethodField()
+    replaced_by = serializers.SerializerMethodField()
+
     class Meta(FormSummarySerializer.Meta):
-        fields = (*FormSummarySerializer.Meta.fields, "guidance_languages", "checklist", "fields")
+        fields = (*FormSummarySerializer.Meta.fields, "version", "replaced_by", "guidance_languages", "checklist", "fields")
+
+    def get_version(self, form):
+        return version_number(form)
+
+    def get_replaced_by(self, form):
+        current = form.current_version()
+        return str(current.pk) if current and current.pk != form.pk else None
 
     def get_guidance_languages(self, form):
         return guidance_languages()
