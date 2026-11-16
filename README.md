@@ -9,13 +9,14 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | | |
 | --- | --- |
 | **Sprint 3 goal** | A Form Reviewer can import a real web form with the browser extension, verify and correct it, and publish it. A learner can then find that form, practise it with autosave, and get feedback on their answers. |
-| **Status** | 10 of 16 MVP user stories implemented; the other 6 stay in the product backlog for Sprint 4. |
+| **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
+| **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 150 backend · 89 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
+| **Tests** | 241 backend · 153 frontend · 28 extension unit · 26 extension end-to-end (Playwright) |
 
 ## Contents
 
-- [User stories: Sprint 3 status](#user-stories-sprint-3-status)
+- [User stories](#user-stories)
 - [Features](#features)
 - [Architecture](#architecture)
 - [Getting started](#getting-started)
@@ -27,7 +28,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 - [Reference: API, validation rules, data model, configuration](#reference)
 - [More documentation](#more-documentation)
 
-## User stories: Sprint 3 status
+## User stories
 
 "Implemented" means the acceptance criteria pass in the automated tests and in the demo walkthrough on `main`. Under the course's definition of done, a story becomes **Done** once a teammate has reviewed it.
 
@@ -46,27 +47,55 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **US-25** Import with the extension | Capture a multi-step form with the browser extension and send it for review in one click. | AC-01 creates a pending form with fields and source · AC-02 unsupported fields and rules are reported, never published silently · AC-03 non-reviewers refused | `4841c79` `2aa2e0b` `3970e71` `fa00694` `ae9edf8` | `reviewer/tests/test_extension_import.py`, `Form_Scrapper_Extension/tests/` |
 | **US-26** Submit and get feedback | Submit an attempt and see which answers break the form's rules, next to those fields. | AC-01 outcome recorded · AC-02 per-field feedback · AC-03 a completed attempt is locked; a repeat returns the stored result | `38fc4b4` `01dc41c` | `attempts/tests/test_validation.py`, `test_attempt_api.py`, `PracticeForm.test.jsx` |
 
-### Product backlog (not in Sprint 3)
+### Implemented in Sprint 4 (awaiting review)
 
-| Priority | Stories | Why they wait |
+Each row is one local branch, stacked in this order. A story moves to **Done** once its pull request is reviewed by a teammate and merged.
+
+| Story | What a user can do | Acceptance criteria covered | Branch | Tests |
+| --- | --- | --- | --- | --- |
+| **US-12** Field hints | Open a hint under a question without leaving the form. | AC-01 hint shown with the label still visible · AC-02 opening or closing a hint leaves the answer unchanged · AC-03 a field without a hint shows no hint control and no invented text | `feature/us-12-field-hints` | `guidance/tests/test_hints.py`, `Hints.test.jsx` |
+| **US-09** Translated guidance | Choose a guidance language; the translated label and guidance appear beside the original. | AC-01 translation beside the original · AC-02 changing language keeps labels and answers · AC-03 a missing translation is named and the original guidance is shown | `feature/us-09-translated-guidance` | `guidance/tests/test_translations.py`, `Translations.test.jsx` |
+| **US-18** Preparation checklist | See what to have ready before starting, with every example marked as fictional. | AC-01 checklist shown · AC-02 examples labelled "Fictional example" · AC-03 a form without a checklist says so | `feature/us-18-preparation-checklist` | `guidance/tests/test_checklist.py`, `Checklist.test.jsx` |
+| **US-03** Request instructor help | Ask for a live session from the practice form and follow its status. | AC-01 request stored with the attempt and form · AC-02 confirmation and current status · AC-03 a missing time or note is named and nothing is created | `feature/us-03-assistance-request` | `assistance/tests/test_learner_requests.py`, `AssistancePanel.test.jsx` |
+| **US-05** Instructor requests | See waiting requests, accept one with meeting details, mark it completed or cancel it. | AC-01 queue with form and meeting details · AC-02 request details · AC-03 another instructor's accepted request returns `403` with no request data | `feature/us-05-instructor-requests` | `assistance/tests/test_instructor_requests.py`, `Instructor.test.jsx` |
+| **US-22** Progress filters | Filter the attempts of learners whose request you accepted by unfinished attempts, repeated errors or frequent hint use. | AC-01 filters · AC-02 error and hint-view counts per attempt · AC-03 learners outside the instructor's scope are never listed; asking for one returns `403` | `feature/us-22-progress-filters` | `assistance/tests/test_progress.py`, `LearnerProgress.test.jsx` |
+| **US-15** (stretch) Request a form | Send the link to a form that is not in the catalog and follow it from received to ready to practise. | AC-01 current status shown · AC-02 an unapproved form is never shown as available · AC-03 a declined or rejected request explains why | `feature/us-15-form-requests` | `form_requests/tests/test_form_requests.py`, `Requests.test.jsx` |
+
+Also built in Sprint 4, as changes the team asked for during the sprint:
+
+| Change | What it does | Branch | Tests |
+| --- | --- | --- | --- |
+| Learner accounts (changes US-01) | Learners create an account with a username, a display name and a password (no email), and sign in from any device. Their attempts are kept on the account, listed on **My practice**, and resumed from there. | `feature/learner-accounts` | `accounts/tests/test_authentication.py`, `attempts/tests/test_history.py`, `SignIn.test.jsx`, `PracticeHistory.test.jsx` |
+| Form versions for learners | Each published version is numbered. Learners see the version they are on and a version history listing the questions added, removed and changed. A learner can still open a version they practised after it was replaced. | `feature/form-versions-and-deletion` | `reviewer/tests/test_versions_and_removal.py`, `Versions.test.jsx` |
+| Deleting forms | A reviewer deletes a form and all its versions. A form learners have practised is withdrawn instead: it leaves the catalog and queue, takes no new answers, and its learners keep their results. | `feature/form-versions-and-deletion` | `reviewer/tests/test_versions_and_removal.py`, `ReviewEditing.test.jsx` |
+
+### Product backlog
+
+| Priority | Stories | Status |
 | --- | --- | --- |
-| MVP, Sprint 4 | **US-03** request instructor help · **US-05** instructor views requests · **US-22** instructor progress filters | Need the assistance-request model and instructor screens. Instructors can already sign in and see a placeholder. `ProgressCounter` rows are already recorded per attempt. |
-| MVP, Sprint 4 | **US-09** translated guidance · **US-12** field hints · **US-18** preparation checklist | Need hint, translation and checklist models plus content. |
-| Stretch | US-15 request status · US-19 compare attempts · US-21 favourites · US-24 issue reports | `failure_reason` is already stored for US-15. |
-| Out of scope | US-06, US-07, US-13, US-14, US-20, US-23 | Agreed in Sprint 1. |
+| Stretch | US-19 compare guided and independent attempts · US-21 favourites · US-24 issue reports | Not started |
+| Out of scope | US-06, US-07, US-13, US-14, US-20, US-23 | Agreed in Sprint 1 |
 
 Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 
 ## Features
 
 ### For learners
-- **Sign in with a name only:** no email, no password, no personal details.
+- **A learner account without personal details:** a username, a display name and a password. No email is asked for. Practice history is kept on the account, so a learner can continue on another device.
+- **My practice:** every attempt on every form and version, with how far it got or how many answers needed attention.
 - **Practice catalog:** totals for available, in-progress and submitted forms; keyword search; category filter pills; cards that offer Practise, Continue or View result.
 - **Practice workspace:**
   - numbered questions with the right control for each (text, email, phone, number, date, choice list, checkbox, long text)
   - required markers, and progress on required questions
   - autosave with a status under each answer, and an overall "All changes saved" indicator
   - resume after a reload
+- **Help while practising:**
+  - a hint under any question a reviewer wrote one for (US-12)
+  - a guidance language: translated labels and guidance appear beside the original text, and a missing translation is named, never invented (US-09)
+  - a preparation checklist before starting, with every example marked as fictional (US-18)
+  - **Help from an instructor:** ask for a live session about this attempt and follow it until it is booked (US-03)
+- **Form versions:** the version number and, after an update, what changed. A version the learner practised stays readable after it is replaced or removed.
+- **Request a form:** send the link to a form that is not in the catalog and follow its status (US-15).
 - **Submission and feedback:** asks before submitting with required questions unanswered. Answers are checked against their field's type (email, phone, link, date, number, choice) and limits. Afterwards, a summary links each problem to its field, and the answers lock.
 
 ### For Form Reviewers
@@ -85,6 +114,13 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - a per-form table, and for each form, the questions learners get wrong most often and which rule they broke, plus the median time to submit
   - an approved form's review page links straight to its insights
 
+- **Learner requests:** each requested page once, with how many learners asked (never who). Importing the page with the extension links the requests automatically; a reviewer can also link one to an existing form or decline it with a reason.
+- **Deleting a form:** removes every version. A form learners have practised is withdrawn instead, keeping their results.
+
+### For instructors
+- **Assistance requests** (US-05): waiting requests are open to every instructor; accepting one with meeting details books it and hides it from the others. Mark it completed or cancel it afterwards.
+- **Learner progress** (US-22): attempts by learners whose request you accepted, with error and hint-view counts, filtered by unfinished attempts, repeated errors or frequent hint use. Filters stay in the address.
+
 ### Browser extension (form extractor)
 - Walks multi-step forms with fictional sample data and **never submits**. It stops before final "Submit", "Pay" or "Create account" buttons.
 - Captures labels, types, required flags, options (including custom and lazy dropdowns), validation, and conditional questions. It also handles iframes and shadow DOM.
@@ -94,7 +130,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 ### Across the system
 - **Server-side permissions:** every route checks role and ownership. Signed out gets `401`; wrong role or owner gets `403` with no protected data.
 - **Security:** staff passwords are stored as bcrypt hashes; session cookies are HttpOnly (and Secure when not in debug); every write needs a CSRF token; extension requests are accepted only from trusted origins.
-- **Privacy:** learners store a display name only. Imports carry structure only, and a payload containing answers is rejected. Practice answers never leave PracticeMode.
+- **Privacy:** a learner account holds a chosen username, a display name and a bcrypt password hash, and nothing else about the person. Imports carry structure only, and a payload containing answers is rejected. Practice answers never leave PracticeMode.
 
 ## Architecture
 
@@ -111,6 +147,9 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 | `catalog/` | Learner search of approved forms | US-02 |
 | `attempts/` | Practice attempts, autosaved answers, completion feedback, progress counters, reviewer analytics, `seed_demo_activity` | US-08, US-11, US-26 |
 | `reviewer/` | Import endpoint, review queue, notifications, decisions, corrections, `seed_demo` | US-04, US-10, US-16, US-17, US-25 |
+| `guidance/` | Hints, translations and preparation checklists, `seed_guidance` | US-09, US-12, US-18 |
+| `assistance/` | Assistance requests and instructor progress, `seed_demo_assistance` | US-03, US-05, US-22 |
+| `form_requests/` | Learner requests for new forms | US-15 |
 | `practicemode/` | Django settings, URL routing, `.env` loader | |
 | `frontend/` | React web app ([frontend/README.md](frontend/README.md)) | all screens |
 | `Form_Scrapper_Extension/` | Chrome extension ([its README](Form_Scrapper_Extension/README.md)) | US-25 |
@@ -130,10 +169,11 @@ python3 -m venv .venv
 cp .env.example .env                       # optional local settings, see Configuration
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py seed_demo       # two fictional forms awaiting review
+.venv/bin/python manage.py seed_guidance   # hints, translations and a checklist for them
 .venv/bin/python manage.py shell -c "
 from django.contrib.auth.models import Group, User
-for name, role in [('reviewer', 'FORM_REVIEWER'), ('instructor', 'INSTRUCTOR')]:
-    user, _ = User.objects.get_or_create(username=name, defaults={'first_name': name.title()})
+for name, role, first in [('reviewer', 'FORM_REVIEWER', 'Rita'), ('instructor', 'INSTRUCTOR', 'Ines')]:
+    user, _ = User.objects.get_or_create(username=name, defaults={'first_name': first})
     user.set_password('change-me-123')
     user.is_staff = True
     user.save()
@@ -142,7 +182,7 @@ for name, role in [('reviewer', 'FORM_REVIEWER'), ('instructor', 'INSTRUCTOR')]:
 .venv/bin/python manage.py runserver
 ```
 
-Once a form is approved, `.venv/bin/python manage.py seed_demo_activity` adds two weeks of fictional practice by 24 "Demo learner" accounts, so Practice insights has numbers to show. `seed_demo_activity --clear` removes exactly that data and nothing else.
+Once a form is approved, `.venv/bin/python manage.py seed_demo_activity` adds two weeks of fictional practice by 24 "Demo learner" accounts, so Practice insights has numbers to show. Then `.venv/bin/python manage.py seed_demo_assistance` gives the `instructor` account three waiting help requests and five booked sessions, so the instructor screens have data. Each command's `--clear` option removes exactly what it made and nothing else.
 
 ### 2. Web app (http://localhost:5173)
 
@@ -162,11 +202,11 @@ npm run dev
 
 | Role | How to sign in | Lands on |
 | --- | --- | --- |
-| Learner | **I am practising**, then any display name | Practice forms |
-| Form Reviewer | **Staff sign-in**: `reviewer` / `change-me-123` | Form review dashboard (also `/admin/`) |
-| Instructor | **Staff sign-in**: `instructor` / `change-me-123` | Instructor placeholder (Sprint 4) |
+| Learner | **Create account**: choose a username, a display name and a password (8 or more characters, not only numbers) | Practice forms |
+| Form Reviewer | **Sign in**: `reviewer` / `change-me-123` | Form review dashboard (also `/admin/`) |
+| Instructor | **Sign in**: `instructor` / `change-me-123` | Assistance requests |
 
-Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use a private window for the learner so the two sessions stay separate.
+Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use a private window for the learner so the two sessions stay separate. Learner passwords cannot be recovered without an email address; an administrator can set a new one with `changepassword`.
 
 ## Demo script
 
@@ -180,11 +220,20 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 8. **US-26:** the learner submits with a bad email and a missing required answer. Feedback appears under those fields, and the answers lock.
 9. **Practice insights:** back as the reviewer, open **Practice insights**. The learner's attempt is counted without their name. Open the form to see which questions were missed. Run `seed_demo_activity` beforehand for a fuller chart.
 
+**Sprint 4 additions** (run `seed_guidance`, `seed_demo_activity` and `seed_demo_assistance` first):
+
+10. **Learner account:** create an account, start the housing form, type an answer, sign out, sign back in from another browser. **My practice** lists the attempt and **Continue** restores the answer.
+11. **US-18, US-12, US-09:** the housing form shows "Before you start" with fictional examples. Open a hint, then switch the guidance language to Español (translated) and to हिन्दी (named as unavailable; the original guidance is shown). The typed answer stays.
+12. **US-03:** press **Ask an instructor** with nothing filled in (both missing details are named), then send a time and a note.
+13. **US-05, US-22:** as the instructor, open the request, try to accept without meeting details (refused), then accept it. **View this learner's progress**, then filter **Frequent hint use**. A second instructor account opening the same request gets "not available to you".
+14. **US-15:** as the learner, **Request a form** with a page link. As the reviewer, **Learner requests** shows it; link it to a form, and the learner's request shows **Ready to practise**.
+15. **Versions and deletion:** as the reviewer, revise the housing form, add a question and approve. The learner's old attempt shows "Version 1, since updated", and the new version's history lists the new question. Delete the course form: because demo learners practised it, it is withdrawn, and the learner's request now says it was removed.
+
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 150 backend tests
-(cd frontend && npm test)                           # 89 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 241 backend tests
+(cd frontend && npm test)                           # 153 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 26 end-to-end
 ```
 
@@ -203,6 +252,10 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 | `sourceAvailability` with three states | Boolean `source_available`, set by the importer and confirmable by the reviewer | Covers US-10 AC-03 for the MVP; automatic re-checking is in the backlog |
 | API-07 to API-10 for reviewers | Plus `PATCH` form details and the `/fields` routes for corrections | Extraction is never perfect; reviewers must fix it before approving (US-10) |
 | Tests with Jest + Supertest | Django test client (backend), Vitest (frontend), Playwright (extension) | Django backend chosen in Sprint 2; same four-way permission cases |
+| Learners give a display name only, with no password (Sprint 1 Privacy NFR, UC-01) | Learners create an account with a username, a display name and a bcrypt-hashed password; still no email | Requested in Sprint 4 so practice history follows the learner across sign-ins and devices. A learner who forgets their password needs an administrator, because there is no email to reset it |
+| `ProgressCounter.hintViewCount` with no write path | `POST /api/attempts/{id}/hint-views` counts each opened hint | US-22 filters on hint use (Sprint 2, DD-04) |
+| Progress visible for learners with a request assigned to the instructor (DD-02) | Requests in `SCHEDULED` or `COMPLETED` with that instructor; a cancelled session ends the access | A cancelled session should not keep exposing a learner's progress |
+| Forms are approved or rejected, never deleted | Reviewers can delete a form; one with learner attempts gets the new `WITHDRAWN` status instead | Keeps learners' results while taking the form out of use |
 | Supported input types include RADIO and FILE | Radio groups import as choice lists; file fields are reported and skipped | File uploads (PDF/DOCX checks) are in the backlog |
 
 ## Team
@@ -239,10 +292,13 @@ All paths are under `/api` and have no trailing slash. A signed-out caller gets 
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/session` | Sets the CSRF cookie; returns the current user or `{"user": null}` |
-| `POST` | `/api/login` | Staff username and password, or learner display name |
+| `POST` | `/api/login` | Username and password, for every role |
+| `POST` | `/api/register` | Create a learner account: `{username, displayName, password}`; `201` and signed in |
 | `POST` | `/api/logout` | Ends the session; `204` |
 
 Paths have no trailing slash. Unsafe requests require the session cookies and `X-CSRFToken` header, including anonymous login. Initialize cookies with `GET /api/session`; login rotates CSRF, so reread the cookie afterward. Staff login accepts `{"username":"...","password":"...","role":"INSTRUCTOR"}` (role is optional). It returns `{"user":{"id":"...","displayName":"...","role":"INSTRUCTOR"}}`; exactly one recognized role group is required. Learner login accepts `{"role":"LEARNER","displayName":"Alex"}` and returns the same shape with role `LEARNER`; a storage failure returns `503 LEARNER_IDENTITY_UNAVAILABLE` without a session. A public signed-out session response is `200`, while protected endpoints return `401`. Wrong role/ownership returns `403` without protected data. Reviewers cannot read learner answers.
+
+**Sprint 4 change:** display-name-only learner access was replaced by accounts. `POST /api/register` takes a username (3 to 30 letters, numbers, dots, dashes or underscores, unique ignoring case), a display name and a password (8 or more characters, not a common or all-numeric password, not the username or display name). It never accepts an email or a role. A taken username returns `409 USERNAME_TAKEN`; invalid details return `400` with the field. Every role then signs in through `POST /api/login` with `{username, password}`; an optional `role` is checked, never granted.
 
 #### Learner catalog (US-02)
 
@@ -283,6 +339,43 @@ Answer PATCH accepts `{"value": ...}` and returns `{fieldId, value, savedAt}`. R
 
 Completion accepts no body. Policy A follows DD-05/API-16: the first successful completion returns `200` with `{status: "COMPLETED", completedAt, validationFeedback: [{fieldId, ruleType, errorMessage}]}`, even when validation errors exist. Empty feedback means no supported-rule errors were found. Status, feedback, completion time, and the progress error count are persisted atomically. A repeated completion returns `409` with the identical stored result and no duplicate updates. Subsequent answer changes return `409 ATTEMPT_COMPLETED`.
 
+#### Practice history, hints, versions (Sprint 4)
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/attempts` | The learner's own attempts, newest first: `{id, formId, formTitle, formStatus, formVersion, status, startedAt, lastSavedAt, completedAt, answeredCount, issueCount}`. No answers |
+| `POST` | `/api/attempts/{attemptId}/hint-views` | `{"fieldId"}` counts one opened hint (US-12, used by US-22). `404` when the field has no hint, `409` after submission |
+| `GET` | `/api/forms/{formId}/versions` | Published versions, newest first: `{id, version, title, status, publishedAt, fieldCount, current, changes: {added, removed, changed}}` |
+
+The form detail (`GET /api/forms/{formId}`) now also returns `version`, `replaced_by`, `guidance_languages`, `checklist` (`[{position, description, fictional_example}]`, empty when none was defined), and on each field `hints` (`[{language_code, text}]`) and `translations` (`[{language_code, translated_label, guidance_text}]`). A learner who practised a version that was later replaced or withdrawn can still read it (`200`, status `SUPERSEDED` or `WITHDRAWN`); anyone else gets `410 FORM_REPLACED` or `410 FORM_REMOVED`. Saving or submitting an attempt on a withdrawn form returns `409 FORM_REMOVED`.
+
+#### Assistance and progress (US-03, US-05, US-22)
+
+| Method | Path | Caller | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/assistance-requests` | Learner | API-11: `{attemptId, requestedSlot, note}`; `201`. Missing or past slot, or blank note: `400`, nothing created. Another learner's attempt: `403`. An attempt with an open request: `409` |
+| `GET` | `/api/assistance-requests?attemptId=` | Learner | Own requests and their status |
+| `GET` | `/api/assistance-requests?status=` | Instructor | API-12: every `REQUESTED` request plus the caller's own |
+| `GET` | `/api/assistance-requests/{requestId}` | Learner who owns it, or instructor | API-13. An instructor reads it while it waits, or once it is theirs; otherwise `403` with no request fields |
+| `PATCH` | `/api/assistance-requests/{requestId}/schedule` | Instructor | API-17: `{meetingDetails}` accepts it (`SCHEDULED`). Already accepted by another instructor: `409 REQUEST_ALREADY_SCHEDULED` |
+| `POST` | `/api/assistance-requests/{requestId}/complete` | Assigned instructor | `SCHEDULED` to `COMPLETED` |
+| `POST` | `/api/assistance-requests/{requestId}/cancel` | Owning learner, or the assigned instructor | Open to `CANCELLED` |
+| `GET` | `/api/progress?incomplete=&minErrors=&minHints=&formId=&learnerCode=` | Instructor | API-14: attempts of learners with a `SCHEDULED` or `COMPLETED` request assigned to the caller, with `validationErrorCount` and `hintViewCount`. A `learnerCode` outside that scope returns `403` |
+
+Requests and progress show the learner's display name and username (`learnerCode`), never answers.
+
+#### Form requests (US-15)
+
+| Method | Path | Caller | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/form-requests` | Learner | `{url, note?}`; `201`. Only `http`/`https` links. A page already published returns `409 FORM_ALREADY_AVAILABLE` with `formId`; the same learner asking again while it is open returns `409 REQUEST_ALREADY_OPEN` |
+| `GET` | `/api/form-requests` | Learner | Own requests with `state` (`RECEIVED`, `AWAITING_REVIEW`, `AVAILABLE`, `NOT_AVAILABLE`), `message` and, when available, the current version's `formId` |
+| `GET` | `/api/review/form-requests?status=` | Form Reviewer | Requests with `requestCount` for the same page; no learner details |
+| `POST` | `/api/review/form-requests/{requestId}/link` | Form Reviewer | `{formId}` links every open request for that page to a form awaiting review or approved |
+| `POST` | `/api/review/form-requests/{requestId}/decline` | Form Reviewer | `{reason}` declines every open request for that page; learners see the reason |
+
+Requests are matched by page: scheme, host and path, ignoring the query string, fragment and a trailing slash. An import through `POST /api/forms/extractions` links the open requests for its page.
+
 #### Form review and import (US-04, US-10, US-16, US-17, US-25)
 
 | Method | Path | Purpose |
@@ -296,6 +389,7 @@ Completion accepts no body. Policy A follows DD-05/API-16: the first successful 
 | `PUT` | `/api/review/forms/{formId}/fields/order` | `{"fieldIds": [...]}` puts the fields in the source's order |
 | `POST` | `/api/review/forms/{formId}/preview-check` | `{"answers": {fieldId: value}}` returns the `validationFeedback` a learner would get; nothing is saved |
 | `POST` | `/api/review/forms/{formId}/revisions` | Start revising an approved form: returns a pending copy (`201`), or `409` with `formId` when a copy from that source already awaits review |
+| `DELETE` | `/api/review/forms/{formId}` | Delete the form and all its versions (`{"outcome": "DELETED"}`), or withdraw them when learners practised any (`{"outcome": "WITHDRAWN"}`). Already withdrawn: `409` |
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
 | `GET` | `/api/review/notifications` | Notifications for forms awaiting review |
 | `POST` | `/api/forms/extractions` | Import an extracted form for review (used by the browser extension) |
@@ -309,7 +403,7 @@ Supported schema import
         -> APPROVED (available to learners) or REJECTED (with reason)
 ```
 
-Only Form Reviewers can call these. The analytics routes return aggregates only: no learner name, username, ID or answer value. A learner who signs in twice counts twice, because each sign-in is a new learner. A form can be decided only once; a repeat returns `409`, and rejecting without a reason returns `400`.
+Only Form Reviewers can call these. The analytics routes return aggregates only: no learner name, username, ID or answer value. Each learner account counts once. A form can be decided only once; a repeat returns `409`, and rejecting without a reason returns `400`.
 
 The import endpoint accepts structure only: `{title, source_url, source_available, categories?, fields: [{position, label, input_type, required, validation}]}`. Payloads that carry learner answers are rejected. Each field's `validation` may hold only the rules the attempt module can check, listed below; anything else returns `400`. A second import of a source that is still awaiting review returns `409 DUPLICATE_PENDING_IMPORT`.
 
@@ -350,6 +444,14 @@ extracted fields, source information, and lifecycle status are outside this endp
 - `Attempt`: UUID ID, protected learner FK (`settings.AUTH_USER_MODEL`, related name `practice_attempts`), protected form FK (`reviewer.PracticeForm`, related name `attempts`), `IN_PROGRESS`/`COMPLETED` status, start/save/completion timestamps, JSON feedback list. Database checks enforce valid status, completion timestamp consistency, and save/completion times not preceding start.
 - `Answer`: UUID ID, attempt FK (`CASCADE`, related name `answers`), protected field FK (`reviewer.FormField`, related name `practice_answers`), nullable JSON value, update timestamp; unique `(attempt, field)`.
 - `ProgressCounter`: UUID ID, one-to-one attempt FK (`CASCADE`, related name `progress`), nonnegative validation-error/hint-view counters, update timestamp. Services create the row with its attempt; the uniqueness constraint prevents duplicates. Completion stores the feedback count rather than incrementing it on retries.
+
+Sprint 4 adds three apps:
+
+- `guidance`: `Hint` and `Translation` (one per field and language; a missing row means no guidance, never invented text) and `ChecklistItem` (one per form and position). Revising a form copies its guidance.
+- `assistance`: `AssistanceRequest` (attempt, learner, optional instructor, requested slot, note, status, meeting details). Database constraints allow one open request per attempt, require an instructor and meeting details when `SCHEDULED`, and keep `REQUESTED` rows unassigned.
+- `form_requests`: `FormRequest` (learner, URL, page key, note, status `OPEN`/`LINKED`/`DECLINED`, optional form, decline reason). Deleting a form clears the link.
+
+`PracticeForm.status` gains `WITHDRAWN`.
 
 Role/ownership, field-to-form consistency, and completed-attempt immutability are enforced by API permissions and transactional services, not by cross-table SQL checks. Other modules must preserve these invariants when writing directly. Form definitions/fields must not be structurally changed underneath existing attempts; publish a new form record for such changes. Form-status changes block new attempts but do not remove an existing owner's saved work.
 
