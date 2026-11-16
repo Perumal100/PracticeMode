@@ -64,3 +64,17 @@ export function saveFieldGuidance(formId, fieldId, { hint, translations }) {
 export function saveChecklist(formId, items) {
   return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/checklist`, { method: 'PUT', body: { items } });
 }
+
+// AI drafts of hints or translations; learners do not see them until approved.
+// Resolves to { created, skipped, providers }.
+export function draftGuidance(formId, task, languages) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/guidance/ai`, { method: 'POST', body: languages ? { task, languages } : { task } });
+}
+
+export function approveDrafts(formId, fieldIds) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/guidance/approve-drafts`, { method: 'POST', body: fieldIds ? { fieldIds } : {} });
+}
+
+export function discardDrafts(formId) {
+  return apiRequest(`/api/review/forms/${encodeURIComponent(formId)}/guidance/discard-drafts`, { method: 'POST', body: {} });
+}

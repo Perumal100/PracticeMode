@@ -26,11 +26,15 @@ import {
   reorderFields as defaultReorderFields,
   reviseForm as defaultReviseForm,
   saveChecklist as defaultSaveChecklist,
+  approveDrafts as defaultApproveDrafts,
+  discardDrafts as defaultDiscardDrafts,
+  draftGuidance as defaultDraftGuidance,
   saveFieldGuidance as defaultSaveFieldGuidance,
   updateField as defaultUpdateField,
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
 import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
+import { AIDraftButtons, DraftsBanner, aiErrorMessage, countDrafts } from './AIDrafts.jsx';
 import ChecklistEditor from './ChecklistEditor.jsx';
 import FormPreview from './FormPreview.jsx';
 import GuidanceEditor, { GuidanceSummary } from './GuidanceEditor.jsx';
@@ -235,6 +239,10 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
   const saveFieldGuidance = api.saveFieldGuidance ?? defaultSaveFieldGuidance;
   const saveChecklist = api.saveChecklist ?? defaultSaveChecklist;
   const [guidanceFor, setGuidanceFor] = useState(null);
+  const draftGuidance = api.draftGuidance ?? defaultDraftGuidance;
+  const approveDrafts = api.approveDrafts ?? defaultApproveDrafts;
+  const discardDrafts = api.discardDrafts ?? defaultDiscardDrafts;
+  const [aiBusy, setAiBusy] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
   const [editingDetails, setEditingDetails] = useState(false);
@@ -260,6 +268,10 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
 
   function askToDecide(decision) {
     setError(null);
+    if (decision === 'APPROVE' && countDrafts(form.data?.fields) > 0) {
+      setError('Review the AI drafts first: approve or discard them, then approve the form.');
+      return;
+    }
     if (decision === 'REJECT' && !reason.trim()) {
       setReasonError('Give a reason before rejecting, so the problem is recorded.');
       return;
@@ -276,7 +288,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       setForm({ state: 'ready', data, error: null });
       toast.success(decision === 'APPROVE' ? 'Approved. Learners can now practise this form.' : 'Rejected. Learners cannot start this form.');
     } catch (err) {
-      setError(err?.status === 409 ? 'This form has already been reviewed. Reload to see the recorded decision.'
+      setError(err?.code === 'AI_DRAFTS_PENDING' ? err.message : err?.status === 409 ? 'This form has already been reviewed. Reload to see the recorded decision.'
         : err?.status === 400 ? 'The decision was not accepted. Check the reason and try again.'
           : reviewErrorMessage(err));
     } finally {
@@ -311,6 +323,42 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       },
     }));
     toast.success(`Guidance saved for "${field.label}".`);
+  }
+
+  async function reload() {
+    const data = await getReviewForm(formId);
+    setForm({ state: 'ready', data, error: null });
+  }
+
+  async function runDraft(task, languages) {
+    setAiBusy(task);
+    setError(null);
+    try {
+      const result = await draftGuidance(formId, task, languages);
+      await reload();
+      const what = task === 'hints' ? 'hint' : 'translation';
+      if (result.created) toast.success(`Drafted ${result.created} ${what}${result.created === 1 ? '' : 's'} with ${result.providers.join(' and ')}. Review them before approving.`);
+      else toast.info(task === 'hints' ? 'Every question already has a hint.' : 'Every question already has those translations.');
+      if (result.skipped) toast.warning(`The AI gave no usable draft for ${result.skipped} ${what}${result.skipped === 1 ? '' : 's'}; write ${result.skipped === 1 ? 'it' : 'them'} yourself.`);
+    } catch (err) {
+      setError(aiErrorMessage(err));
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function settleDrafts(action) {
+    setAiBusy(action);
+    setError(null);
+    try {
+      const result = action === 'approve' ? await approveDrafts(formId) : await discardDrafts(formId);
+      await reload();
+      toast.success(action === 'approve' ? `Approved ${result.approved} AI draft${result.approved === 1 ? '' : 's'}. Learners can now see ${result.approved === 1 ? 'it' : 'them'}.` : `Discarded ${result.discarded} AI draft${result.discarded === 1 ? '' : 's'}.`);
+    } catch (err) {
+      setError(aiErrorMessage(err));
+    } finally {
+      setAiBusy(null);
+    }
   }
 
   async function storeChecklist(items) {
@@ -408,6 +456,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
   // Guidance changes no structure, so it stays editable after approval.
   const guidanceEditable = pending || data.status === 'APPROVED';
   const showActions = pending || guidanceEditable;
+  const draftCount = countDrafts(data.fields);
   const required = data.fields.filter((f) => f.required).length;
   return (
     <>
@@ -433,6 +482,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       />
 
       {error && <Alert variant="destructive" className="mb-6"><AlertCircle />{error}</Alert>}
+      {guidanceEditable && <DraftsBanner count={draftCount} busy={Boolean(aiBusy)} onApproveAll={() => settleDrafts('approve')} onDiscardAll={() => settleDrafts('discard')} />}
       {data.status === 'WITHDRAWN' && <Alert variant="warning" className="mb-6"><AlertTriangle />This form was removed. Learners cannot start it; those who practised it keep their results.</Alert>}
       {data.revision_of && pending && (
         <VersionNotice
@@ -494,7 +544,10 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                 <CardTitle>Extracted fields</CardTitle>
                 <CardDescription>Labels, input types, required flags and validation exactly as learners will get them.{pending && ' Correct anything that differs from the source.'}</CardDescription>
               </div>
-              {pending && <Button variant="outline" size="sm" onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
+              <div className="flex flex-wrap justify-end gap-2">
+                {guidanceEditable && <AIDraftButtons languages={data.guidance_languages} busy={aiBusy === 'hints' || aiBusy === 'translations' ? aiBusy : null} onDraft={runDraft} />}
+                {pending && <Button variant="outline" size="sm" onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
+              </div>
             </CardHeader>
             <Table>
               <caption className="sr-only">Extracted fields</caption>

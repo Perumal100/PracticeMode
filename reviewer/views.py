@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from attempts.validation import validation_feedback
 from form_requests.services import link_open_requests
+from guidance.review import pending_drafts
 from guidance.services import copy_guidance
 
 from .lineage import remove_family
@@ -118,6 +119,12 @@ class ReviewDecisionView(APIView):
 
             decision = request_data.validated_data["decision"]
             is_approved = decision == "APPROVE"
+            if is_approved and (drafts := pending_drafts(practice_form)):
+                return Response({
+                    "error": "AI_DRAFTS_PENDING",
+                    "message": f"Review the {drafts} AI-drafted hint{'s' if drafts != 1 else ''} or translation{'s' if drafts != 1 else ''} first: approve or discard them.",
+                    "count": drafts,
+                }, status=status.HTTP_409_CONFLICT)
             ReviewDecision.objects.create(
                 practice_form=practice_form,
                 reviewer=request.user,

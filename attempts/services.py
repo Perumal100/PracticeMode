@@ -111,7 +111,7 @@ def record_hint_view(learner, attempt_id, field_id):
                 raise AttemptError("FIELD_NOT_FOUND", "The field does not exist.", 404) from None
             if field.practice_form_id != attempt.practice_form_id:
                 raise AttemptError("FIELD_FORM_MISMATCH", "The field does not belong to this attempt's form.", 400)
-            if not Hint.objects.filter(field=field).exists():
+            if not Hint.objects.filter(field=field, approved=True).exists():
                 raise AttemptError("HINT_NOT_FOUND", "This question has no hint.", 404)
             ProgressCounter.objects.filter(attempt=attempt).update(
                 hint_view_count=F("hint_view_count") + 1, updated_at=timezone.now(),

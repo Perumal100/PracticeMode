@@ -12,7 +12,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
 | **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 248 backend · 161 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
+| **Tests** | 263 backend · 167 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -114,6 +114,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - a per-form table, and for each form, the questions learners get wrong most often and which rule they broke, plus the median time to submit
   - an approved form's review page links straight to its insights
 
+- **AI drafts of guidance:** **Draft hints with AI** and **Draft translations with AI** fill in what is missing using Gemini, with Groq as the backup. Only the form's questions (labels, answer types, rules, existing hints) are sent, never anything a learner typed. Drafts are marked "AI draft", learners do not see them, and the form cannot be approved until the reviewer approves (as is, or after editing) or discards every draft.
 - **Guidance:** on the review page, each question has a **Hint and translations** button: a hint in the original language and, per language, a translated label and guidance. A sidebar card holds the preparation checklist with fictional examples. Guidance changes no structure, so it stays editable after approval, and learners see changes at once.
 - **Learner requests:** each requested page once, with how many learners asked (never who). Importing the page with the extension links the requests automatically; a reviewer can also link one to an existing form or decline it with a reason.
 - **Deleting a form:** removes every version. A form learners have practised is withdrawn instead, keeping their results.
@@ -234,8 +235,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 248 backend tests
-(cd frontend && npm test)                           # 161 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 263 backend tests
+(cd frontend && npm test)                           # 167 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
@@ -257,6 +258,7 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 | Learners give a display name only, with no password (Sprint 1 Privacy NFR, UC-01) | Learners create an account with a username, a display name and a bcrypt-hashed password; still no email | Requested in Sprint 4 so practice history follows the learner across sign-ins and devices. A learner who forgets their password needs an administrator, because there is no email to reset it |
 | `ProgressCounter.hintViewCount` with no write path | `POST /api/attempts/{id}/hint-views` counts each opened hint | US-22 filters on hint use (Sprint 2, DD-04) |
 | Progress visible for learners with a request assigned to the instructor (DD-02) | Requests in `SCHEDULED` or `COMPLETED` with that instructor; a cancelled session ends the access | A cancelled session should not keep exposing a learner's progress |
+| Guidance is written by people (Sprint 2, DD: "nothing is invented") | A language model may draft hints and translations, but only as drafts a Form Reviewer approves or corrects before learners see them; a form with unreviewed drafts cannot be approved | Imported forms had no guidance and writing it by hand for four languages did not scale. The human check keeps US-09 AC-03 and US-12 AC-03: nothing unreviewed is shown as guidance |
 | Forms are approved or rejected, never deleted | Reviewers can delete a form; one with learner attempts gets the new `WITHDRAWN` status instead | Keeps learners' results while taking the form out of use |
 | Supported input types include RADIO and FILE | Radio groups import as choice lists; file fields are reported and skipped | File uploads (PDF/DOCX checks) are in the backlog |
 
@@ -392,6 +394,9 @@ Requests are matched by page: scheme, host and path, ignoring the query string, 
 | `POST` | `/api/review/forms/{formId}/preview-check` | `{"answers": {fieldId: value}}` returns the `validationFeedback` a learner would get; nothing is saved |
 | `POST` | `/api/review/forms/{formId}/revisions` | Start revising an approved form: returns a pending copy (`201`), or `409` with `formId` when a copy from that source already awaits review |
 | `PUT` | `/api/review/forms/{formId}/fields/{fieldId}/guidance` | `{hint, translations: [{language_code, translated_label, guidance_text}]}` replaces a question's hint and translations; blank removes them. Pending or approved forms only (`409 GUIDANCE_LOCKED` otherwise) |
+| `POST` | `/api/review/forms/{formId}/guidance/ai` | `{task: "hints"}` or `{task: "translations", languages?: [...]}` drafts the missing hints or translations with AI as unapproved drafts; returns `{created, skipped, providers}`. `503 AI_NOT_CONFIGURED` without keys, `502 AI_FAILED` when every provider fails |
+| `POST` | `/api/review/forms/{formId}/guidance/approve-drafts` | `{fieldIds?}` approves AI drafts as written (all of them when `fieldIds` is omitted) |
+| `POST` | `/api/review/forms/{formId}/guidance/discard-drafts` | Removes every AI draft; guidance written or approved by a reviewer stays |
 | `PUT` | `/api/review/forms/{formId}/checklist` | `{items: [{description, fictional_example}]}` replaces the preparation checklist, in order |
 | `DELETE` | `/api/review/forms/{formId}` | Delete the form and all its versions (`{"outcome": "DELETED"}`), or withdraw them when learners practised any (`{"outcome": "WITHDRAWN"}`). Already withdrawn: `409` |
 | `POST` | `/api/review/forms/{formId}/decision` | `{"decision": "APPROVE"}` or `{"decision": "REJECT", "rejection_reason": "..."}` |
@@ -473,6 +478,10 @@ Every setting is optional for local use. Put local values in a `.env` file at th
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated |
 | `DJANGO_FORCE_HTTPS` | `false` | `true` redirects HTTP to HTTPS |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | empty | Add `chrome-extension://<extension-id>` so the extension can import forms |
+| `GEMINI_API_KEY` | unset | Google Gemini key for AI drafts of hints and translations (tried first) |
+| `GROQ_API_KEY` | unset | Groq key, used when Gemini fails |
+| `GEMINI_MODEL` / `GROQ_MODEL` | `gemini-2.5-flash` / `llama-3.3-70b-versatile` | Models used for drafting |
+| `AI_TIMEOUT_SECONDS` | `30` | How long to wait for each provider |
 
 Staff passwords are stored as bcrypt hashes, and session cookies are HttpOnly. SQLite runs in `IMMEDIATE` transaction mode so concurrent answer saves wait for each other instead of failing.
 

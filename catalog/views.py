@@ -1,3 +1,4 @@
+from django.db.models import Prefetch
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -5,6 +6,7 @@ from rest_framework.views import APIView
 
 from accounts.identity import LEARNER
 from accounts.permissions import HasRole
+from guidance.models import Hint, Translation
 from reviewer.lineage import version_history
 from reviewer.models import FormStatus, PracticeForm
 
@@ -38,7 +40,11 @@ class FormDetailView(APIView):
         if request.query_params:
             raise ValidationError({"filters": "Form detail does not support filters."})
         try:
-            form = PracticeForm.objects.prefetch_related("fields__hints", "fields__translations", "checklist_items").get(pk=form_id)
+            form = PracticeForm.objects.prefetch_related(
+                Prefetch("fields__hints", queryset=Hint.objects.filter(approved=True)),
+                Prefetch("fields__translations", queryset=Translation.objects.filter(approved=True)),
+                "checklist_items",
+            ).get(pk=form_id)
         except PracticeForm.DoesNotExist:
             return Response({"error": "FORM_NOT_FOUND"}, status=404)
         # A learner keeps access to versions they practised, read-only, after

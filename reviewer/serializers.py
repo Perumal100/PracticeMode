@@ -23,11 +23,11 @@ class ReviewFieldSerializer(FormFieldSerializer):
         fields = (*FormFieldSerializer.Meta.fields, "hints", "translations")
 
     def get_hints(self, field):
-        return [{"language_code": h.language_code, "text": h.text} for h in field.hints.all()]
+        return [{"language_code": h.language_code, "text": h.text, "ai_draft": not h.approved} for h in field.hints.all()]
 
     def get_translations(self, field):
-        return [{"language_code": t.language_code, "translated_label": t.translated_label, "guidance_text": t.guidance_text}
-                for t in field.translations.all()]
+        return [{"language_code": t.language_code, "translated_label": t.translated_label, "guidance_text": t.guidance_text,
+                 "ai_draft": not t.approved} for t in field.translations.all()]
 
 
 class PracticeFormQueueSerializer(serializers.ModelSerializer):
