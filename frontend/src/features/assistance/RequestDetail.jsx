@@ -28,7 +28,7 @@ function Row({ label, children }) {
   );
 }
 
-export default function RequestDetail({ requestId, onBack, api = {} }) {
+export default function RequestDetail({ requestId, onBack, onProgress, api = {} }) {
   const getRequest = api.getRequest ?? defaultApi.getRequest;
   const scheduleRequest = api.scheduleRequest ?? defaultApi.scheduleRequest;
   const completeRequest = api.completeRequest ?? defaultApi.completeRequest;
@@ -157,7 +157,13 @@ export default function RequestDetail({ requestId, onBack, api = {} }) {
         <Card>
           <CardHeader><CardTitle>What the learner asked for</CardTitle></CardHeader>
           <dl className="divide-y">
-            <Row label="Learner"><LearnerName request={request} /></Row>
+            <Row label="Learner">
+              <LearnerName request={request} />
+              {/* US-22: progress is readable once this instructor has accepted the request. */}
+              {onProgress && request.instructorName && request.status !== 'CANCELLED' && (
+                <Button variant="link" size="sm" className="mt-1" onClick={() => onProgress(request.learnerCode)}>View this learner's progress</Button>
+              )}
+            </Row>
             <Row label="Practice form">{request.formTitle}</Row>
             <Row label="Requested time"><span className="tabular-nums">{formatDateTime(request.requestedSlot)}</span></Row>
             <Row label="What they need help with"><span className="whitespace-pre-wrap break-words">{request.note}</span></Row>

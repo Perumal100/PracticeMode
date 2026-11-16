@@ -1,13 +1,14 @@
 // App shell: restores the session, then shows the workspace for the user's
 // role. The server enforces every permission; hiding screens is only a
 // convenience (Sprint 2, Rule 3).
-import { BarChart3, ClipboardCheck, FileText, LifeBuoy } from 'lucide-react';
+import { Activity, BarChart3, ClipboardCheck, FileText, LifeBuoy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Toaster } from 'sonner';
 import { AppShell } from '@/components/app-shell.jsx';
 import { BrandMark } from '@/components/brand.jsx';
 import { getSession as defaultGetSession, signOut as defaultSignOut } from './api/session.js';
 import Insights, { FormInsights } from './features/analytics/Insights.jsx';
+import LearnerProgress from './features/assistance/LearnerProgress.jsx';
 import RequestDetail from './features/assistance/RequestDetail.jsx';
 import RequestQueue from './features/assistance/RequestQueue.jsx';
 import SignIn from './features/auth/SignIn.jsx';
@@ -18,15 +19,23 @@ import ReviewQueue from './features/review/ReviewQueue.jsx';
 import { navigate, useHashRoute } from './lib/useHashRoute.js';
 
 const HOME = { LEARNER: '/forms', FORM_REVIEWER: '/review', INSTRUCTOR: '/instructor' };
-const SECTION_ROLE = { forms: 'LEARNER', review: 'FORM_REVIEWER', insights: 'FORM_REVIEWER', instructor: 'INSTRUCTOR' };
+const SECTION_ROLE = { forms: 'LEARNER', review: 'FORM_REVIEWER', insights: 'FORM_REVIEWER', instructor: 'INSTRUCTOR', progress: 'INSTRUCTOR' };
 const NAV = {
   LEARNER: [{ key: 'forms', path: '/forms', label: 'Practice forms', icon: FileText }],
   FORM_REVIEWER: [
     { key: 'review', path: '/review', label: 'Form review', icon: ClipboardCheck },
     { key: 'insights', path: '/insights', label: 'Practice insights', icon: BarChart3 },
   ],
-  INSTRUCTOR: [{ key: 'instructor', path: '/instructor', label: 'Assistance requests', icon: LifeBuoy }],
+  INSTRUCTOR: [
+    { key: 'instructor', path: '/instructor', label: 'Assistance requests', icon: LifeBuoy },
+    { key: 'progress', path: '/progress', label: 'Learner progress', icon: Activity },
+  ],
 };
+
+function withQuery(query) {
+  const search = new URLSearchParams(query).toString();
+  return search ? `?${search}` : '';
+}
 
 export default function App({ getSession = defaultGetSession, signOut = defaultSignOut }) {
   const [session, setSession] = useState({ state: 'loading', user: null });
@@ -77,9 +86,11 @@ export default function App({ getSession = defaultGetSession, signOut = defaultS
       page = route.id
         ? <ReviewDetail key={route.id} formId={route.id} onBack={() => navigate('/review')} onInsights={(id) => navigate(`/insights/${id}`)} onOpenForm={(id) => navigate(`/review/${id}`)} />
         : <ReviewQueue onOpen={(id) => navigate(`/review/${id}`)} />;
+    } else if (route.section === 'progress') {
+      page = <LearnerProgress query={route.query} onQueryChange={(query) => navigate(`/progress${withQuery(query)}`)} />;
     } else {
       page = route.id
-        ? <RequestDetail key={route.id} requestId={route.id} onBack={() => navigate('/instructor')} />
+        ? <RequestDetail key={route.id} requestId={route.id} onBack={() => navigate('/instructor')} onProgress={(code) => navigate(`/progress?learnerCode=${encodeURIComponent(code)}`)} />
         : <RequestQueue status={route.query.status} onStatusChange={(status) => navigate(`/instructor?status=${status}`)} onOpen={(id) => navigate(`/instructor/${id}`)} />;
     }
     content = (
