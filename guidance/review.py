@@ -163,6 +163,23 @@ class AIError(APIException):
         super().__init__({"error": code, "message": message})
 
 
+class AIRateLimitedError(APIException):
+    """The page waits `retryAfter` seconds and tries the same step again."""
+
+    status_code = 429
+
+    def __init__(self, retry_after):
+        super().__init__()
+        # Set after __init__, which would turn the number into text.
+        self.detail = {
+            "error": "AI_RATE_LIMITED",
+            "message": "The AI services are over their free request limit for the moment.",
+            "retryAfter": retry_after,
+        }
+        self.retry_after = retry_after
+        self.wait = retry_after  # DRF sends it as the Retry-After header
+
+
 def _check_editable(form_id):
     try:
         form = PracticeForm.objects.get(pk=form_id)
@@ -178,6 +195,8 @@ def _ask(call, *args):
         return call(*args)
     except ai.AIUnavailable:
         raise AIError(503, "AI_NOT_CONFIGURED", "AI drafting is not set up: add GEMINI_API_KEY or GROQ_API_KEY to the server's .env.") from None
+    except ai.AIRateLimited as error:
+        raise AIRateLimitedError(error.retry_after) from None
     except ai.AIFailed as error:
         raise AIError(502, "AI_FAILED", f"The AI services could not draft this ({error}). Try again, or write the guidance yourself.") from None
 

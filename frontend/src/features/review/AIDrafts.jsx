@@ -23,7 +23,8 @@ export function aiErrorMessage(error) {
   return 'The AI drafts could not be made. Please try again.';
 }
 
-const BATCH = 8;
+// Fewer, larger requests stay within the AI services' free per-minute limits.
+const BATCH = 15;
 const ORIGINAL = 'en';
 
 const hasHint = (field) => (field.hints ?? []).some((h) => h.language_code === ORIGINAL);
@@ -62,34 +63,31 @@ export function planSteps(fields, { hints, languages }) {
   return steps;
 }
 
-/** One dialog for both kinds of draft. */
-export function AIDraftDialog({ fields, languages: allLanguages = [], open, onOpenChange, onRun }) {
+/** Choose the languages to translate into. Hints are drafted separately. */
+export function TranslateDialog({ fields, languages: allLanguages = [], open, onOpenChange, onRun }) {
   const languages = allLanguages.filter((l) => l.code !== ORIGINAL);
   const withoutHint = fields.filter((f) => !hasHint(f)).length;
-  const [hints, setHints] = useState(withoutHint > 0);
   const [chosen, setChosen] = useState(() => languages.map((l) => l.code));
   const toggle = (code) => setChosen((c) => (c.includes(code) ? c.filter((x) => x !== code) : [...c, code]));
-  const plan = planSteps(fields, { hints, languages: languages.filter((l) => chosen.includes(l.code)) });
+  const plan = planSteps(fields, { hints: false, languages: languages.filter((l) => chosen.includes(l.code)) });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Draft guidance with AI</DialogTitle>
+          <DialogTitle>Draft translations with AI</DialogTitle>
           <DialogDescription>
-            Drafts fill in only what is missing and stay hidden from learners until you approve them. Only the form&rsquo;s questions are sent, never a learner&rsquo;s answers.
+            Each question&rsquo;s label and hint is translated, filling in only what is missing. Drafts stay hidden from learners until you approve them.
+            Only the form&rsquo;s questions are sent, never a learner&rsquo;s answers.
           </DialogDescription>
         </DialogHeader>
-        <label htmlFor="ai-hints" className="flex cursor-pointer items-start gap-2 text-sm">
-          <Checkbox id="ai-hints" checked={hints} disabled={!withoutHint} onChange={() => setHints((h) => !h)} />
-          <span>
-            <span className="font-medium">Hints</span>
-            <span className="block text-[13px] text-muted-foreground">{withoutHint ? `For the ${withoutHint} question${withoutHint === 1 ? '' : 's'} without one.` : 'Every question already has a hint.'}</span>
-          </span>
-        </label>
+        {withoutHint > 0 && (
+          <p className="rounded-md bg-warning-soft px-3 py-2 text-[13px] text-warning">
+            {withoutHint} question{withoutHint === 1 ? ' has' : 's have'} no hint yet, so only {withoutHint === 1 ? 'its label' : 'their labels'} will be translated. Draft hints first to have them translated too.
+          </p>
+        )}
         <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Translations of each label and hint</legend>
-          <p className="text-[13px] text-muted-foreground">Hints are written first, so new hints are translated too.</p>
+          <legend className="text-sm font-medium">Languages</legend>
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             {languages.map(({ code, name }) => (
               <label key={code} htmlFor={`ai-lang-${code}`} className="flex cursor-pointer items-center gap-2 text-sm">
@@ -100,11 +98,11 @@ export function AIDraftDialog({ fields, languages: allLanguages = [], open, onOp
           </div>
         </fieldset>
         <p className="text-[13px] text-muted-foreground" role="status">
-          {plan.length ? `${plan.length} step${plan.length === 1 ? '' : 's'}; progress is shown as each finishes.` : 'Nothing is missing for what you chose.'}
+          {plan.length ? `${plan.length} step${plan.length === 1 ? '' : 's'}; progress is shown as each finishes.` : 'Every question already has these translations.'}
         </p>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!plan.length} onClick={() => onRun(plan)}><Sparkles />Start drafting</Button>
+          <Button disabled={!plan.length} onClick={() => onRun(plan)}><Sparkles />Start translating</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -126,6 +124,11 @@ export function DraftProgress({ run, onStop }) {
         </span>
         <Button size="sm" variant="ghost" onClick={onStop} disabled={run.stopping}>{run.stopping ? 'Stopping after this step…' : 'Stop'}</Button>
       </div>
+      {run.waiting > 0 && (
+        <p className="text-[13px] text-warning">
+          The AI services are over their free per-minute limit. Trying this step again in {run.waiting} second{run.waiting === 1 ? '' : 's'}.
+        </p>
+      )}
       <Progress value={done} max={run.steps.length} label="AI drafting progress" />
       <p className="text-xs text-muted-foreground tabular-nums">{run.created + run.updated} draft{run.created + run.updated === 1 ? '' : 's'} so far</p>
     </div>

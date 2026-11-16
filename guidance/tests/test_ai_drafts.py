@@ -1,6 +1,8 @@
 """AI-drafted hints and translations: hidden until a reviewer approves them."""
 import io
 import json
+import os
+import re
 import urllib.error
 from unittest.mock import patch
 
@@ -11,7 +13,12 @@ from guidance.models import Hint, Translation
 
 from .base import GuidanceTestCase
 
-KEYS = {"GEMINI_API_KEY": "test-gemini", "GROQ_API_KEY": "test-groq"}
+# Extra numbered keys from a local .env are blanked, so each test sets exactly the keys it uses.
+KEYS = {
+    **{name: "" for name in os.environ if re.fullmatch(r"(GEMINI|GROQ)_API_KEY_\d+", name)},
+    "GEMINI_API_KEY": "test-gemini",
+    "GROQ_API_KEY": "test-groq",
+}
 
 
 def gemini_reply(payload):
@@ -22,8 +29,8 @@ def groq_reply(payload):
     return {"choices": [{"message": {"content": json.dumps(payload)}}]}
 
 
-def http_error(code):
-    return urllib.error.HTTPError("https://example.test", code, "error", {}, io.BytesIO(b"{}"))
+def http_error(code, body=b"{}", headers=None):
+    return urllib.error.HTTPError("https://example.test", code, "error", headers or {}, io.BytesIO(body))
 
 
 class FakeAI:
@@ -97,8 +104,8 @@ class AIDraftTests(GuidanceTestCase):
         fake = FakeAI(gemini=http_error(503), groq=hints_for)
         response = self.draft({"task": "hints"}, fake)
         self.assertEqual((response.status_code, response.data["providers"], response.data["created"]), (200, ["Groq"], 2))
-        # Gemini is asked twice (a 503 is often momentary), then Groq answers.
-        self.assertEqual([("googleapis" in url) for url, _ in fake.calls], [True, True, False])
+        # Each Gemini model is asked twice (a 503 is often momentary), then Groq answers.
+        self.assertEqual([("googleapis" in url) for url, _ in fake.calls], [True] * 8 + [False])
 
     def test_a_temporary_failure_is_retried_before_the_backup(self):
         class Flaky(FakeAI):
@@ -113,6 +120,72 @@ class AIDraftTests(GuidanceTestCase):
         self.assertEqual(response.data["providers"], ["Gemini"])
         self.assertEqual([("googleapis" in url) for url, _ in fake.calls], [True, True])
 
+    def test_a_rate_limited_model_is_skipped_for_the_next_one(self):
+        class FirstModelLimited(FakeAI):
+            def __call__(self, url, body, headers, timeout):
+                self.calls.append((url, body))
+                if "gemini-2.5-flash:" in url:
+                    raise http_error(429)
+                return gemini_reply(hints_for(json.loads(body["contents"][0]["parts"][0]["text"])))
+
+        fake = FirstModelLimited()
+        response = self.draft({"task": "hints"}, fake)
+        self.assertEqual((response.status_code, response.data["providers"]), (200, ["Gemini"]))
+        self.assertIn("gemini-flash-lite-latest:", fake.calls[1][0])
+
+    def test_a_retired_model_is_skipped(self):
+        class Retired(FakeAI):
+            def __call__(self, url, body, headers, timeout):
+                self.calls.append((url, body))
+                if "googleapis" in url:
+                    raise http_error(404)
+                if body["model"] == "openai/gpt-oss-120b":
+                    raise http_error(404)
+                return groq_reply(hints_for(json.loads(body["messages"][1]["content"])))
+
+        fake = Retired()
+        response = self.draft({"task": "hints"}, fake)
+        self.assertEqual(response.data["providers"], ["Groq"])
+        self.assertEqual(fake.calls[-1][1]["model"], "openai/gpt-oss-20b")
+
+    def test_when_every_model_is_rate_limited_the_page_is_told_how_long_to_wait(self):
+        gemini_limit = json.dumps({"error": {"details": [{"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "17s"}]}}).encode()
+        fake = FakeAI(gemini=None, groq=None)
+
+        def limited(url, body, headers, timeout):
+            fake.calls.append((url, body))
+            raise http_error(429, gemini_limit) if "googleapis" in url else http_error(429, headers={"Retry-After": "9"})
+
+        with patch.object(ai, "_post_json", limited):
+            response = self.send("post", f"/api/review/forms/{self.form.pk}/guidance/ai", {"task": "hints"}, client=self.rita)
+        self.assertEqual((response.status_code, response.data["error"], response.data["retryAfter"]), (429, "AI_RATE_LIMITED", 18))
+        self.assertEqual(response["Retry-After"], "18")
+        self.assertEqual(len(fake.calls), 7)  # four Gemini models, then three Groq
+        self.assertFalse(Hint.objects.exists())
+
+    def test_each_gemini_key_is_tried_in_turn_before_groq(self):
+        used = []
+
+        def first_key_limited(url, body, headers, timeout):
+            if "googleapis" not in url:
+                raise AssertionError("Groq should not be needed")
+            used.append(headers["x-goog-api-key"])
+            if headers["x-goog-api-key"] == "test-gemini":
+                raise http_error(429)
+            return gemini_reply(hints_for(json.loads(body["contents"][0]["parts"][0]["text"])))
+
+        with patch.dict("os.environ", {"GEMINI_API_KEY_2": "third", "GEMINI_API_KEY_1": "second"}), \
+                patch.object(ai, "_post_json", first_key_limited):
+            response = self.send("post", f"/api/review/forms/{self.form.pk}/guidance/ai", {"task": "hints"}, client=self.rita)
+        self.assertEqual((response.status_code, response.data["providers"]), (200, ["Gemini"]))
+        # Every model on the first key is limited; the second key answers at once.
+        self.assertEqual(used, ["test-gemini"] * 4 + ["second"])
+
+    def test_keys_are_read_in_number_order_without_repeats(self):
+        env = {"GEMINI_API_KEY": "a", "GEMINI_API_KEY_10": "d", "GEMINI_API_KEY_2": "c", "GEMINI_API_KEY_1": "b", "GEMINI_API_KEY_3": "a"}
+        with patch.dict("os.environ", env):
+            self.assertEqual(ai._keys("GEMINI_API_KEY"), ["a", "b", "c", "d"])
+
     def test_a_bad_key_is_not_retried(self):
         fake = FakeAI(gemini=http_error(401), groq=hints_for)
         response = self.draft({"task": "hints"}, fake)
@@ -122,8 +195,8 @@ class AIDraftTests(GuidanceTestCase):
     def test_both_failing_is_502_and_stores_nothing(self):
         response = self.draft({"task": "hints"}, FakeAI(gemini=http_error(500), groq=http_error(401)))
         self.assertEqual((response.status_code, response.data["error"]), (502, "AI_FAILED"))
-        self.assertIn("Gemini: HTTP 500", response.data["message"])
-        self.assertIn("Groq: HTTP 401", response.data["message"])
+        self.assertIn("Gemini gemini-2.5-flash: HTTP 500", response.data["message"])
+        self.assertIn("Groq openai/gpt-oss-120b: HTTP 401", response.data["message"])
         self.assertFalse(Hint.objects.exists())
 
     def test_unusable_replies_are_ignored(self):

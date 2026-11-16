@@ -12,7 +12,7 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
 | **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
 | **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 286 backend · 181 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
+| **Tests** | 291 backend · 183 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
@@ -115,7 +115,7 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
   - a per-form table, and for each form, the questions learners get wrong most often and which rule they broke, plus the median time to submit
   - an approved form's review page links straight to its insights
 
-- **AI drafts of guidance:** **Draft with AI** opens one dialog for hints and translations (pick the languages) and fills in only what is missing, using Gemini with Groq as the backup. It runs in batches of up to 8 questions per language with a progress bar and a Stop button. Hints are written first, so the translations include them, and a hint added after a translation existed is translated into it. Each provider is retried once after a temporary failure (rate limit, overload, timeout). Only the form's questions (labels, answer types, rules, existing hints) are sent, never anything a learner typed. Drafts are marked "AI draft", learners do not see them, and the form cannot be approved until the reviewer approves (as is, or after editing) or discards every draft.
+- **AI drafts of guidance:** two separate buttons. **Draft hints** writes a hint for every question without one; **Draft translations** opens a dialog to pick languages and translates each question's label and hint (draft hints first so they are translated too). Only what is missing is filled in, using Gemini with Groq as the backup. Requests go in batches of up to 15 questions per language, with a progress bar and a Stop button, and a hint added after a translation existed is translated into it. To stay within the free limits, every configured key (`GEMINI_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, …) is tried with each model in turn: a rate-limited, retired or slow model moves to the next one, a server error gets one retry, and a refused key moves to the next key. If every key and model is rate-limited, the page counts down the wait the service asks for and tries the same step again, up to 5 times. Only the form's questions (labels, answer types, rules, existing hints) are sent, never anything a learner typed. Drafts are marked "AI draft", learners do not see them, and the form cannot be approved until the reviewer approves (as is, or after editing) or discards every draft.
 - **Guidance:** on the review page, each question has a **Hint and translations** button: a hint in the original language and, per language, a translated label and guidance. A sidebar card holds the preparation checklist with fictional examples. Guidance changes no structure, so it stays editable after approval, and learners see changes at once.
 - **Instructors:** approve or decline instructor sign-ups, add an instructor directly (active at once), and remove or restore one. Removing an instructor signs them out and returns their booked sessions to the waiting queue; their history is kept.
 - **Change requests:** instructors' reports of mistakes in published forms, by form and question. Open the form to revise it, then mark the request resolved or declined with an answer the instructor sees.
@@ -241,8 +241,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 286 backend tests
-(cd frontend && npm test)                           # 181 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 291 backend tests
+(cd frontend && npm test)                           # 183 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
@@ -503,8 +503,10 @@ Every setting is optional for local use. Put local values in a `.env` file at th
 | `DJANGO_FORCE_HTTPS` | `false` | `true` redirects HTTP to HTTPS |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | empty | Add `chrome-extension://<extension-id>` so the extension can import forms |
 | `GEMINI_API_KEY` | unset | Google Gemini key for AI drafts of hints and translations (tried first) |
-| `GROQ_API_KEY` | unset | Groq key, used when Gemini fails |
-| `GEMINI_MODEL` / `GROQ_MODEL` | `gemini-2.5-flash` / `llama-3.3-70b-versatile` | Models used for drafting |
+| `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, … | unset | More Gemini keys (from other accounts), tried in number order when one is over its limit |
+| `GROQ_API_KEY` (and `GROQ_API_KEY_1`, …) | unset | Groq key(s), used when every Gemini key fails |
+| `GEMINI_MODELS` / `GROQ_MODELS` | `gemini-2.5-flash,gemini-flash-lite-latest,gemini-3-flash-preview,gemini-3.1-flash-lite` / `openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b` | Models tried in order, comma-separated |
+| `AI_TIMEOUT_SECONDS` | `30` | How long one AI request may take before the next model is tried |
 | `AI_TIMEOUT_SECONDS` | `30` | How long to wait for each provider |
 
 Staff passwords are stored as bcrypt hashes, and session cookies are HttpOnly. SQLite runs in `IMMEDIATE` transaction mode so concurrent answer saves wait for each other instead of failing.
