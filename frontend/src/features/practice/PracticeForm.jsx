@@ -1,6 +1,6 @@
 // US-11 practise an approved form, US-08 autosave and resume, US-26 complete
 // and see validation feedback, US-12 hints, US-09 translated guidance, US-18
-// preparation checklist.
+// preparation checklist, US-03 ask an instructor for help.
 import { AlertCircle, CheckCircle2, CircleAlert, CloudOff, Languages, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -16,6 +16,7 @@ import { NativeSelect } from '@/components/ui/input.jsx';
 import { Progress } from '@/components/ui/progress.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
+import AssistancePanel from '../assistance/AssistancePanel.jsx';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
 import { ORIGINAL_LANGUAGE, formHasLanguage, guidanceFor, rememberLanguage, storedLanguage } from './guidance.js';
 import PreparationChecklist from './PreparationChecklist.jsx';
@@ -360,6 +361,7 @@ function AttemptView({ attemptId, form, language, api, onCompleted, onRestart })
             )}
           </CardFooter>
         </Card>
+        <div className="mt-3"><AssistancePanel attemptId={attemptId} api={api.assistance} /></div>
         <div className="mt-3"><PreparationChecklist items={form.checklist} collapsible /></div>
         <p className="mt-3 flex gap-2 px-1 text-xs text-muted-foreground">
           <ShieldCheck className="size-3.5 shrink-0" />Practice copy. Nothing is sent to the real website.
