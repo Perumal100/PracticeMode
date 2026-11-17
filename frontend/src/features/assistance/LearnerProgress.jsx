@@ -42,12 +42,14 @@ export default function LearnerProgress({ query = {}, onQueryChange, listProgres
   const [state, setState] = useState({ status: 'loading', rows: [], error: null });
   // The unfiltered list supplies the form choices and the total.
   const [everything, setEverything] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = () => setRefreshKey((current) => current + 1);
 
   useEffect(() => {
     let cancelled = false;
     listProgress({}).then((rows) => !cancelled && setEverything(rows), () => !cancelled && setEverything([]));
     return () => { cancelled = true; };
-  }, [listProgress]);
+  }, [listProgress, refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +59,7 @@ export default function LearnerProgress({ query = {}, onQueryChange, listProgres
       (error) => !cancelled && setState({ status: 'error', rows: [], error: progressError(error) }),
     );
     return () => { cancelled = true; };
-  }, [filterKey, listProgress]);
+  }, [filterKey, listProgress, refreshKey]);
 
   const forms = useMemo(() => {
     const byId = new Map((everything ?? []).map((row) => [row.formId, row.formTitle]));
@@ -94,7 +96,14 @@ export default function LearnerProgress({ query = {}, onQueryChange, listProgres
           <NativeSelect id="progress-form" className="w-56" value={filters.formId ?? ''} onChange={(e) => set('formId', e.target.value)}>
             <option value="">All forms</option>
             {forms.map(([id, title]) => <option key={id} value={id}>{title}</option>)}
-          </NativeSelect>
+                    </NativeSelect>
+                    <Button
+            variant="outline"
+            onClick={refresh}
+            disabled={state.status === 'loading'}
+          >
+            {state.status === 'loading' ? 'Refreshing…' : 'Refresh'}
+          </Button>
           {filtered && <Button variant="ghost" onClick={() => onQueryChange({})}><X />Clear</Button>}
         </div>
       </div>
@@ -107,7 +116,17 @@ export default function LearnerProgress({ query = {}, onQueryChange, listProgres
             <span className="sr-only">Loading progress…</span>
           </Card>
         )}
-        {state.status === 'error' && <Alert variant="destructive"><AlertCircle />{state.error}</Alert>}
+                {state.status === 'error' && (
+            <Alert variant="destructive">
+              <AlertCircle />
+              <div className="flex flex-wrap items-center gap-3">
+                <span>{state.error}</span>
+                <Button variant="outline" onClick={refresh}>
+                  Try again
+                </Button>
+              </div>
+            </Alert>
+          )}
         {state.status === 'ready' && state.rows.length === 0 && (
           filtered ? (
             <EmptyState role="status" icon={SearchX} title="No attempts match these filters" description="Try fewer filters or another form."
