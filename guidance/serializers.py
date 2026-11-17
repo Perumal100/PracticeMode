@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .languages import LANGUAGES
-from .models import Hint, Translation
+from .models import ChecklistItem, Hint, Translation
 
 
 class HintSerializer(serializers.ModelSerializer):
@@ -14,6 +14,12 @@ class TranslationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Translation
         fields = ("language_code", "translated_label", "guidance_text")
+
+
+class ChecklistItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChecklistItem
+        fields = ("position", "description", "fictional_example")
 
 
 def guidance_languages():

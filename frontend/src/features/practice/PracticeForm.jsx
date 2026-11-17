@@ -1,5 +1,6 @@
 // US-11 practise an approved form, US-08 autosave and resume, US-26 complete
-// and see validation feedback, US-12 hints, US-09 translated guidance.
+// and see validation feedback, US-12 hints, US-09 translated guidance, US-18
+// preparation checklist.
 import { AlertCircle, CheckCircle2, CircleAlert, CloudOff, Languages, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -17,6 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
 import { ORIGINAL_LANGUAGE, formHasLanguage, guidanceFor, rememberLanguage, storedLanguage } from './guidance.js';
+import PreparationChecklist from './PreparationChecklist.jsx';
 import Question, { messagesByField } from './Question.jsx';
 import { completeAttempt as defaultCompleteAttempt, recordHintView as defaultRecordHintView, startAttempt as defaultStartAttempt } from './practiceApi.js';
 import { rememberAttempt, storedAttempt } from './attemptStore.js';
@@ -145,6 +147,8 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-4">
+          <PreparationChecklist items={form.data.checklist} />
           <Card>
             <CardHeader>
               <CardTitle>What this form asks for</CardTitle>
@@ -164,6 +168,7 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
               ))}
             </ol>
           </Card>
+          </div>
           <Card className="h-fit lg:sticky lg:top-10">
             <CardContent className="space-y-4 pt-5">
               <div className="flex gap-3 text-sm">
@@ -355,6 +360,7 @@ function AttemptView({ attemptId, form, language, api, onCompleted, onRestart })
             )}
           </CardFooter>
         </Card>
+        <div className="mt-3"><PreparationChecklist items={form.checklist} collapsible /></div>
         <p className="mt-3 flex gap-2 px-1 text-xs text-muted-foreground">
           <ShieldCheck className="size-3.5 shrink-0" />Practice copy. Nothing is sent to the real website.
         </p>

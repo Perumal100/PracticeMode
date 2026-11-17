@@ -50,3 +50,25 @@ class Translation(models.Model):
             raise ValidationError({"language_code": "A translation is into a language other than the original."})
         if not self.translated_label.strip() and not self.guidance_text.strip():
             raise ValidationError("A translation needs a label, guidance text, or both.")
+
+
+class ChecklistItem(models.Model):
+    """One thing to have ready before starting a form. Examples are always fictional."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    practice_form = models.ForeignKey("reviewer.PracticeForm", related_name="checklist_items", on_delete=models.CASCADE)
+    position = models.PositiveIntegerField()
+    description = models.CharField(max_length=300)
+    fictional_example = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(fields=["practice_form", "position"], name="unique_checklist_position_per_form"),
+            models.CheckConstraint(condition=models.Q(position__gte=1), name="checklist_position_positive"),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.description.strip():
+            raise ValidationError({"description": "A checklist item needs a description."})

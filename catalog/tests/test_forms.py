@@ -144,6 +144,7 @@ class CatalogTests(TestCase):
                 {"code": "en", "name": "English"}, {"code": "es", "name": "Español"}, {"code": "zh", "name": "中文"},
                 {"code": "hi", "name": "हिन्दी"}, {"code": "ar", "name": "العربية"},
             ],
+            "checklist": [],
             "fields": [
                 {"id": str(self.first_field.pk), "position": 1, "label": "Fictional name",
                  "input_type": "text", "required": True, "validation": {"maxLength": 60}, "hints": [], "translations": []},

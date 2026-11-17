@@ -1,4 +1,4 @@
-from .models import Hint, Translation
+from .models import ChecklistItem, Hint, Translation
 
 
 def copy_guidance(original, revision):
@@ -14,4 +14,9 @@ def copy_guidance(original, revision):
                     translated_label=item.translated_label, guidance_text=item.guidance_text)
         for item in Translation.objects.filter(field__practice_form=original).select_related("field")
         if item.field.position in targets
+    ])
+    ChecklistItem.objects.bulk_create([
+        ChecklistItem(practice_form=revision, position=item.position, description=item.description,
+                      fictional_example=item.fictional_example)
+        for item in original.checklist_items.all()
     ])
