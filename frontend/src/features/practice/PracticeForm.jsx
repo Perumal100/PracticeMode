@@ -1,6 +1,6 @@
 // US-11 practise an approved form, US-08 autosave and resume, US-26 complete
-// and see validation feedback.
-import { AlertCircle, CheckCircle2, CircleAlert, CloudOff, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
+// and see validation feedback, US-12 hints, US-09 translated guidance.
+import { AlertCircle, CheckCircle2, CircleAlert, CloudOff, Languages, Loader2, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/page-header.jsx';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.jsx';
@@ -11,10 +11,12 @@ import {
 import { StatusBadge } from '@/components/ui/badge.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { NativeSelect } from '@/components/ui/input.jsx';
 import { Progress } from '@/components/ui/progress.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
+import { ORIGINAL_LANGUAGE, formHasLanguage, guidanceFor, rememberLanguage, storedLanguage } from './guidance.js';
 import Question, { messagesByField } from './Question.jsx';
 import { completeAttempt as defaultCompleteAttempt, recordHintView as defaultRecordHintView, startAttempt as defaultStartAttempt } from './practiceApi.js';
 import { rememberAttempt, storedAttempt } from './attemptStore.js';
@@ -31,12 +33,25 @@ const START_ERRORS = {
 
 const answered = (value) => value !== null && value !== undefined && value !== '' && value !== false;
 
+// US-09: the language of the guidance. Labels and answers are never changed by it.
+function LanguagePicker({ languages, value, onChange }) {
+  return (
+    <div className="flex items-center gap-2">
+      <label htmlFor="guidance-language" className="whitespace-nowrap text-[13px] font-medium text-muted-foreground">Guidance language</label>
+      <NativeSelect id="guidance-language" value={value} onChange={(e) => onChange(e.target.value)} className="w-36">
+        {languages.map((item) => <option key={item.code} value={item.code} lang={item.code}>{item.name}</option>)}
+      </NativeSelect>
+    </div>
+  );
+}
+
 export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {} }) {
   const getForm = api.getForm ?? defaultGetForm;
   const startAttempt = api.startAttempt ?? defaultStartAttempt;
   const [form, setForm] = useState({ status: 'loading', data: null, error: null });
   const [attempt, setAttempt] = useState(() => storedAttempt(user.id, formId));
   const [start, setStart] = useState({ busy: false, error: null });
+  const [languageCode, setLanguageCode] = useState(storedLanguage);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +108,17 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
 
   const fields = form.data.fields;
   const required = fields.filter((f) => f.required).length;
+  const languages = form.data.guidance_languages ?? [];
+  const chosen = languages.find((item) => item.code === languageCode) ?? { code: ORIGINAL_LANGUAGE, name: 'English' };
+  const translating = chosen.code !== ORIGINAL_LANGUAGE;
+  const translated = translating && formHasLanguage(fields, chosen.code);
+  const language = { ...chosen, partial: translated };
+
+  function chooseLanguage(code) {
+    rememberLanguage(code);
+    setLanguageCode(code);
+  }
+
   return (
     <>
       <PageHeader
@@ -100,12 +126,19 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
         breadcrumb={breadcrumb}
         meta={attempt && <StatusBadge status={attempt.status} />}
         description={`${fields.length} question${fields.length === 1 ? '' : 's'} · ${required} required`}
+        actions={languages.length > 1 && <LanguagePicker languages={languages} value={chosen.code} onChange={chooseLanguage} />}
       />
+      {translating && !translated && (
+        <Alert variant="info" className="mb-4">
+          <Languages />This form has no guidance in {chosen.name} yet. Labels and hints are shown in the original language.
+        </Alert>
+      )}
       {attempt ? (
         <AttemptView
           key={attempt.id}
           attemptId={attempt.id}
           form={form.data}
+          language={language}
           api={api}
           onCompleted={() => openAttempt(attempt.id, 'COMPLETED')}
           onRestart={() => openAttempt(null)}
@@ -120,7 +153,12 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
             <ol className="divide-y">
               {fields.map((field) => (
                 <li key={field.id} className="flex items-center justify-between gap-3 px-5 py-2.5 text-sm">
-                  <span>{field.label}</span>
+                  <span>
+                    {field.label}
+                    {guidanceFor(field, language.code).translatedLabel && (
+                      <span lang={language.code} dir="auto" className="block text-[13px] text-muted-foreground">{guidanceFor(field, language.code).translatedLabel}</span>
+                    )}
+                  </span>
                   {field.required && <span className="text-xs text-muted-foreground">Required</span>}
                 </li>
               ))}
@@ -153,7 +191,7 @@ function SaveSummary({ statuses }) {
   return <p className="text-sm text-muted-foreground">Answers save automatically as you go.</p>;
 }
 
-function AttemptView({ attemptId, form, api, onCompleted, onRestart }) {
+function AttemptView({ attemptId, form, language, api, onCompleted, onRestart }) {
   const completeAttempt = api.completeAttempt ?? defaultCompleteAttempt;
   const recordHintView = api.recordHintView ?? defaultRecordHintView;
   const resume = useResumeAttempt(attemptId, api.getAttempt ? { getAttempt: api.getAttempt } : undefined);
@@ -281,6 +319,7 @@ function AttemptView({ attemptId, form, api, onCompleted, onRestart }) {
                 value={values[field.id]}
                 disabled={completed}
                 messages={feedbackByField[field.id]}
+                language={language}
                 onChange={(v) => change(field.id, v)}
                 onBlur={() => flush(field.id)}
                 // Counted once per opening and never retried, so a view is not counted twice.

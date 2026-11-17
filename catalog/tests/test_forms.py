@@ -140,11 +140,15 @@ class CatalogTests(TestCase):
         self.assertEqual(response.json(), {
             "id": str(self.form.pk), "title": "Housing application", "status": "APPROVED",
             "categories": ["Housing", "Government"],
+            "guidance_languages": [
+                {"code": "en", "name": "English"}, {"code": "es", "name": "Español"}, {"code": "zh", "name": "中文"},
+                {"code": "hi", "name": "हिन्दी"}, {"code": "ar", "name": "العربية"},
+            ],
             "fields": [
                 {"id": str(self.first_field.pk), "position": 1, "label": "Fictional name",
-                 "input_type": "text", "required": True, "validation": {"maxLength": 60}, "hints": []},
+                 "input_type": "text", "required": True, "validation": {"maxLength": 60}, "hints": [], "translations": []},
                 {"id": str(self.last_field.pk), "position": 2, "label": "Additional information",
-                 "input_type": "textarea", "required": False, "validation": {}, "hints": []},
+                 "input_type": "textarea", "required": False, "validation": {}, "hints": [], "translations": []},
             ],
         })
         # Exact shape assertions exclude source, decision, reviewer and notification
