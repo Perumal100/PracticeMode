@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from attempts.validation import validation_feedback
+from guidance.services import copy_guidance
 
 from .models import FormField, FormStatus, PracticeForm, ReviewDecision, ReviewNotification
 from .permissions import IsFormReviewer
@@ -290,6 +291,7 @@ class ReviewRevisionView(APIView):
                           input_type=field.input_type, required=field.required, validation=field.validation)
                 for field in original.fields.all()
             ])
+            copy_guidance(original, revision)
         return _form_response(revision.id, status.HTTP_201_CREATED)
 
 

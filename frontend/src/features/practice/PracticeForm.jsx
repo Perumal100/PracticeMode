@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
 import Question, { messagesByField } from './Question.jsx';
-import { completeAttempt as defaultCompleteAttempt, startAttempt as defaultStartAttempt } from './practiceApi.js';
+import { completeAttempt as defaultCompleteAttempt, recordHintView as defaultRecordHintView, startAttempt as defaultStartAttempt } from './practiceApi.js';
 import { rememberAttempt, storedAttempt } from './attemptStore.js';
 
 const FORM_ERRORS = {
@@ -155,6 +155,7 @@ function SaveSummary({ statuses }) {
 
 function AttemptView({ attemptId, form, api, onCompleted, onRestart }) {
   const completeAttempt = api.completeAttempt ?? defaultCompleteAttempt;
+  const recordHintView = api.recordHintView ?? defaultRecordHintView;
   const resume = useResumeAttempt(attemptId, api.getAttempt ? { getAttempt: api.getAttempt } : undefined);
   const [values, setValues] = useState({});
   const [result, setResult] = useState(null);
@@ -282,6 +283,8 @@ function AttemptView({ attemptId, form, api, onCompleted, onRestart }) {
                 messages={feedbackByField[field.id]}
                 onChange={(v) => change(field.id, v)}
                 onBlur={() => flush(field.id)}
+                // Counted once per opening and never retried, so a view is not counted twice.
+                onHintOpen={completed ? undefined : (fieldId) => { recordHintView(attemptId, fieldId).catch(() => {}); }}
               >
                 <AutosaveStatus status={statuses[field.id]} onRetry={() => retry(field.id)} />
               </Question>

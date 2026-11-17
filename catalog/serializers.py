@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from guidance.serializers import HintSerializer
 from reviewer.models import FormField, PracticeForm
 
 
@@ -34,9 +35,11 @@ class FormSummarySerializer(serializers.ModelSerializer):
 
 
 class FormFieldSerializer(serializers.ModelSerializer):
+    hints = HintSerializer(many=True, read_only=True)
+
     class Meta:
         model = FormField
-        fields = ("id", "position", "label", "input_type", "required", "validation")
+        fields = ("id", "position", "label", "input_type", "required", "validation", "hints")
 
 
 class FormDetailSerializer(FormSummarySerializer):

@@ -142,13 +142,13 @@ class CatalogTests(TestCase):
             "categories": ["Housing", "Government"],
             "fields": [
                 {"id": str(self.first_field.pk), "position": 1, "label": "Fictional name",
-                 "input_type": "text", "required": True, "validation": {"maxLength": 60}},
+                 "input_type": "text", "required": True, "validation": {"maxLength": 60}, "hints": []},
                 {"id": str(self.last_field.pk), "position": 2, "label": "Additional information",
-                 "input_type": "textarea", "required": False, "validation": {}},
+                 "input_type": "textarea", "required": False, "validation": {}, "hints": []},
             ],
         })
-        # Exact shape assertions exclude source, decision, reviewer, notification,
-        # and fabricated options/guidance/checklist fields.
+        # Exact shape assertions exclude source, decision, reviewer and notification
+        # data. Guidance nobody wrote is an empty list, never invented text.
 
     def test_detail_without_stored_fields_returns_an_empty_field_array(self):
         response = self.client.get(self.detail_url(self.other))

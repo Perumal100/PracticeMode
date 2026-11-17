@@ -9,7 +9,7 @@ from accounts.permissions import HasRole
 from . import services
 from .serializers import (
     AnswerSerializer, AttemptSerializer, CompletionRequestSerializer,
-    CompletionSerializer, CreateAttemptSerializer, SaveAnswerSerializer,
+    CompletionSerializer, CreateAttemptSerializer, HintViewSerializer, SaveAnswerSerializer,
 )
 
 
@@ -51,3 +51,11 @@ class AttemptCompletionView(LearnerAttemptView):
         data.is_valid(raise_exception=True)
         attempt, first_completion = services.complete_attempt(request.user, attempt_id)
         return Response(CompletionSerializer(attempt).data, status=200 if first_completion else 409)
+
+
+class HintViewView(LearnerAttemptView):
+    def post(self, request, attempt_id):
+        data = HintViewSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        count = services.record_hint_view(request.user, attempt_id, data.validated_data["fieldId"])
+        return Response({"hintViewCount": count})

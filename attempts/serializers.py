@@ -27,6 +27,10 @@ class CompletionRequestSerializer(RequestSerializer):
     pass
 
 
+class HintViewSerializer(RequestSerializer):
+    fieldId = serializers.UUIDField()
+
+
 class AnswerSerializer(serializers.ModelSerializer):
     fieldId = serializers.UUIDField(source="field_id")
     savedAt = serializers.DateTimeField(source="updated_at")
