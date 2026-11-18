@@ -32,6 +32,7 @@ async function setup() {
     getAttempt: vi.fn().mockResolvedValue(attempt),
     saveAnswer: vi.fn((attemptId, fieldId, value) => Promise.resolve({ fieldId, value, savedAt: '2026-11-10T10:00:00Z' })),
     recordHintView: vi.fn().mockResolvedValue({ hintViewCount: 1 }),
+    listMyAttempts: vi.fn().mockRejectedValue(new Error('offline')),
     debounceMs: 0,
   };
   render(<PracticeForm formId="f1" user={user} onBack={() => {}} api={api} />);

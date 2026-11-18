@@ -369,6 +369,36 @@
           });
         }
 
+        // A job page with an "Apply" button and no form yet: open the form
+        // first. Done once, before the first step, and only on an origin
+        // where automatic navigation is allowed; assisted mode asks the user.
+        if (!s.steps.length && !s.entry) {
+          const entry = detector.findEntryAction(extractor.extractFields());
+          if (entry) {
+            if (s.mode === 'assisted') {
+              await waitForUser({
+                type: 'entry_action',
+                action: entry.text,
+                identity: nav.currentIdentity(),
+                message: `Click "${entry.text}" to open the application form. PracticeMode records the form as soon as it appears.`,
+              });
+              return;
+            }
+            const before = nav.currentIdentity();
+            await store.update((st) => {
+              st.entry = { action: entry.text, url: U.safeUrl(location.href), by: 'extension' };
+              st.message = `Opening the form with "${entry.text}"…`;
+            });
+            nav.openEntry(entry.el);
+            const change = await nav.waitForStepChange(before, 10000);
+            if (run !== activeRun) return;
+            if (!change.changed) {
+              await store.update((st) => store.addWarning(st, `Clicked "${entry.text}" but no form appeared on this page.`));
+            }
+            continue;
+          }
+        }
+
         // Auto mode only reaches this point on an authorised origin, so
         // exploring branches (which changes answers) is allowed here.
         const capture = await captureCurrentStep({ explore: s.mode === 'auto' && s.settings.exploreBranches });
@@ -500,11 +530,15 @@
         const fields = extractor.extractFields();
         const identity = detector.stepIdentity(fields, nav.quickTitle());
         const last = s.steps[s.steps.length - 1];
-        if (!last || !detector.sameStep(last.identity, identity)) {
+        // Before the first step, the page to move away from is the one with the "Apply" button.
+        const opening = s.blocker?.type === 'entry_action';
+        const reference = opening ? s.blocker.identity : last?.identity;
+        if (!reference || !detector.sameStep(reference, identity)) {
           stopWatcher();
           await store.update((st) => {
             if (st.pendingNavigation) st.pendingNavigation = null;
-            st.navigation.push({ fromStep: st.steps.length, toStep: st.steps.length + 1, action: 'manual', kind: 'by-user' });
+            if (opening) st.entry = { action: st.blocker.action, url: st.startUrl, by: 'user' };
+            else st.navigation.push({ fromStep: st.steps.length, toStep: st.steps.length + 1, action: 'manual', kind: 'by-user' });
             st.status = 'running';
             st.blocker = null;
             st.message = 'New step detected — capturing…';
@@ -599,6 +633,8 @@
     stopWatcher();
     await store.update((st) => {
       if (mode) st.mode = mode;
+      // "I opened it — continue": do not ask for the Apply button again.
+      if (st.blocker?.type === 'entry_action') st.entry = { action: st.blocker.action, url: st.startUrl, by: 'user' };
       st.status = 'running';
       st.blocker = null;
       st.message = 'Resuming…';

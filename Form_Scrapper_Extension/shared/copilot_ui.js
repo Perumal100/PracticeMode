@@ -104,6 +104,13 @@
       return `<div class="pm-alert blue"><div><b>Assisted mode</b> — ${esc(b.message)}</div>
         <div class="pm-row"><button class="pm-btn pm-btn-secondary pm-btn-small" data-action="stop">Finish &amp; keep results</button></div></div>`;
     }
+    if (b.type === 'entry_action') {
+      return `<div class="pm-alert blue" role="status"><div><b>Open the form.</b> ${esc(b.message)}</div>
+        <div class="pm-row">
+          <button class="pm-btn pm-btn-secondary pm-btn-small" data-action="resume">The form is open — continue</button>
+          <button class="pm-btn pm-btn-ghost pm-btn-small" data-action="stop">Stop</button>
+        </div></div>`;
+    }
     const hard = ['captcha', 'auth', 'identity_verification'].includes(b.type);
     const continueLabel = b.type === 'ambiguous_action' ? 'I clicked it — continue' : hard ? 'I completed it — continue' : 'Continue';
     return `<div class="pm-alert ${hard ? 'red' : 'amber'}" role="status">

@@ -1,7 +1,7 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ExternalLink, Eye, Gavel, History, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ClipboardList, ExternalLink, Eye, Gavel, History, Languages, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
@@ -21,14 +21,23 @@ import {
   addField as defaultAddField,
   decideForm as defaultDecideForm,
   deleteField as defaultDeleteField,
+  deleteForm as defaultDeleteForm,
   getReviewForm as defaultGetReviewForm,
   reorderFields as defaultReorderFields,
   reviseForm as defaultReviseForm,
+  saveChecklist as defaultSaveChecklist,
+  approveDrafts as defaultApproveDrafts,
+  discardDrafts as defaultDiscardDrafts,
+  draftGuidance as defaultDraftGuidance,
+  saveFieldGuidance as defaultSaveFieldGuidance,
   updateField as defaultUpdateField,
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
 import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
+import { AIDraftButtons, DraftsBanner, aiErrorMessage, countDrafts } from './AIDrafts.jsx';
+import ChecklistEditor from './ChecklistEditor.jsx';
 import FormPreview from './FormPreview.jsx';
+import GuidanceEditor, { GuidanceSummary } from './GuidanceEditor.jsx';
 import { reviewErrorMessage } from './ReviewQueue.jsx';
 
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES);
@@ -54,7 +63,7 @@ function OptionsSummary({ options, label }) {
         className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
       >
         {open ? 'Hide options' : `Show all ${options.length}`}
-        <ChevronDown className={`size-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`size-3.5 transition-transform motion-reduce:transition-none ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="mt-2 max-w-xl rounded-md border bg-muted/40 p-2">
@@ -226,6 +235,15 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
   const deleteField = api.deleteField ?? defaultDeleteField;
   const reorderFields = api.reorderFields ?? defaultReorderFields;
   const reviseForm = api.reviseForm ?? defaultReviseForm;
+  const deleteForm = api.deleteForm ?? defaultDeleteForm;
+  const saveFieldGuidance = api.saveFieldGuidance ?? defaultSaveFieldGuidance;
+  const saveChecklist = api.saveChecklist ?? defaultSaveChecklist;
+  const [guidanceFor, setGuidanceFor] = useState(null);
+  const draftGuidance = api.draftGuidance ?? defaultDraftGuidance;
+  const approveDrafts = api.approveDrafts ?? defaultApproveDrafts;
+  const discardDrafts = api.discardDrafts ?? defaultDiscardDrafts;
+  const [aiBusy, setAiBusy] = useState(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
   const [editingDetails, setEditingDetails] = useState(false);
   const [fieldEditor, setFieldEditor] = useState({ open: false, field: null });
@@ -250,6 +268,10 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
 
   function askToDecide(decision) {
     setError(null);
+    if (decision === 'APPROVE' && countDrafts(form.data?.fields) > 0) {
+      setError('Review the AI drafts first: approve or discard them, then approve the form.');
+      return;
+    }
     if (decision === 'REJECT' && !reason.trim()) {
       setReasonError('Give a reason before rejecting, so the problem is recorded.');
       return;
@@ -266,7 +288,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       setForm({ state: 'ready', data, error: null });
       toast.success(decision === 'APPROVE' ? 'Approved. Learners can now practise this form.' : 'Rejected. Learners cannot start this form.');
     } catch (err) {
-      setError(err?.status === 409 ? 'This form has already been reviewed. Reload to see the recorded decision.'
+      setError(err?.code === 'AI_DRAFTS_PENDING' ? err.message : err?.status === 409 ? 'This form has already been reviewed. Reload to see the recorded decision.'
         : err?.status === 400 ? 'The decision was not accepted. Check the reason and try again.'
           : reviewErrorMessage(err));
     } finally {
@@ -286,6 +308,77 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
       setBusy(false);
       if (err?.body?.error === 'REVISION_PENDING') onOpenForm?.(err.body.formId);
       else setError(err?.status === 409 ? 'Only approved forms can be revised. Reload to see the current status.' : reviewErrorMessage(err));
+    }
+  }
+
+  async function saveGuidance(field, guidance) {
+    const saved = await saveFieldGuidance(formId, field.id, guidance);
+    setForm((current) => ({
+      ...current,
+      data: {
+        ...current.data,
+        fields: current.data.fields.map((f) => (f.id === field.id
+          ? { ...f, hints: saved.hint ? [{ language_code: 'en', text: saved.hint }] : [], translations: saved.translations }
+          : f)),
+      },
+    }));
+    toast.success(`Guidance saved for "${field.label}".`);
+  }
+
+  async function reload() {
+    const data = await getReviewForm(formId);
+    setForm({ state: 'ready', data, error: null });
+  }
+
+  async function runDraft(task, languages) {
+    setAiBusy(task);
+    setError(null);
+    try {
+      const result = await draftGuidance(formId, task, languages);
+      await reload();
+      const what = task === 'hints' ? 'hint' : 'translation';
+      if (result.created) toast.success(`Drafted ${result.created} ${what}${result.created === 1 ? '' : 's'} with ${result.providers.join(' and ')}. Review them before approving.`);
+      else toast.info(task === 'hints' ? 'Every question already has a hint.' : 'Every question already has those translations.');
+      if (result.skipped) toast.warning(`The AI gave no usable draft for ${result.skipped} ${what}${result.skipped === 1 ? '' : 's'}; write ${result.skipped === 1 ? 'it' : 'them'} yourself.`);
+    } catch (err) {
+      setError(aiErrorMessage(err));
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function settleDrafts(action) {
+    setAiBusy(action);
+    setError(null);
+    try {
+      const result = action === 'approve' ? await approveDrafts(formId) : await discardDrafts(formId);
+      await reload();
+      toast.success(action === 'approve' ? `Approved ${result.approved} AI draft${result.approved === 1 ? '' : 's'}. Learners can now see ${result.approved === 1 ? 'it' : 'them'}.` : `Discarded ${result.discarded} AI draft${result.discarded === 1 ? '' : 's'}.`);
+    } catch (err) {
+      setError(aiErrorMessage(err));
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function storeChecklist(items) {
+    const checklist = await saveChecklist(formId, items);
+    setForm((current) => ({ ...current, data: { ...current.data, checklist } }));
+  }
+
+  async function remove() {
+    setConfirmRemove(false);
+    setError(null);
+    setBusy(true);
+    try {
+      const { outcome } = await deleteForm(formId);
+      toast.success(outcome === 'WITHDRAWN'
+        ? 'Form removed. Learners who practised it keep their attempts and results.'
+        : 'Form deleted.');
+      onBack();
+    } catch (err) {
+      setBusy(false);
+      setError(err?.status === 409 ? 'This form has already been removed.' : reviewErrorMessage(err));
     }
   }
 
@@ -360,6 +453,10 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
 
   const data = form.data;
   const pending = data.status === 'AWAITING_REVIEW';
+  // Guidance changes no structure, so it stays editable after approval.
+  const guidanceEditable = pending || data.status === 'APPROVED';
+  const showActions = pending || guidanceEditable;
+  const draftCount = countDrafts(data.fields);
   const required = data.fields.filter((f) => f.required).length;
   return (
     <>
@@ -377,11 +474,16 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
             {['APPROVED', 'SUPERSEDED'].includes(data.status) && onInsights && (
               <Button variant="outline" onClick={() => onInsights(data.id)}><BarChart3 />Practice insights</Button>
             )}
+            {data.status !== 'WITHDRAWN' && (
+              <Button variant="ghost" className="text-destructive" disabled={busy} onClick={() => setConfirmRemove(true)}><Trash2 />Delete form</Button>
+            )}
           </>
         )}
       />
 
       {error && <Alert variant="destructive" className="mb-6"><AlertCircle />{error}</Alert>}
+      {guidanceEditable && <DraftsBanner count={draftCount} busy={Boolean(aiBusy)} onApproveAll={() => settleDrafts('approve')} onDiscardAll={() => settleDrafts('discard')} />}
+      {data.status === 'WITHDRAWN' && <Alert variant="warning" className="mb-6"><AlertTriangle />This form was removed. Learners cannot start it; those who practised it keep their results.</Alert>}
       {data.revision_of && pending && (
         <VersionNotice
           title="This is a revision of a published form"
@@ -442,7 +544,10 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                 <CardTitle>Extracted fields</CardTitle>
                 <CardDescription>Labels, input types, required flags and validation exactly as learners will get them.{pending && ' Correct anything that differs from the source.'}</CardDescription>
               </div>
-              {pending && <Button variant="outline" size="sm" onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
+              <div className="flex flex-wrap justify-end gap-2">
+                {guidanceEditable && <AIDraftButtons languages={data.guidance_languages} busy={aiBusy === 'hints' || aiBusy === 'translations' ? aiBusy : null} onDraft={runDraft} />}
+                {pending && <Button variant="outline" size="sm" onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
+              </div>
             </CardHeader>
             <Table>
               <caption className="sr-only">Extracted fields</caption>
@@ -451,7 +556,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                   <TableHead className="w-10">#</TableHead>
                   <TableHead>Question and rules</TableHead>
                   <TableHead className="w-36">Answer</TableHead>
-                  {pending && <TableHead className="w-px"><span className="sr-only">Actions</span></TableHead>}
+                  {showActions && <TableHead className="w-px"><span className="sr-only">Actions</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -461,6 +566,7 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                     <TableCell className="min-w-48 align-top">
                       <p className="font-medium leading-snug">{field.label}</p>
                       <div className="mt-1 text-[13px] text-muted-foreground empty:hidden"><RuleSummary field={field} /></div>
+                      <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Languages className="size-3.5" /><GuidanceSummary field={field} languages={data.guidance_languages} /></p>
                     </TableCell>
                     <TableCell className="align-top">
                       <div className="flex flex-col items-start gap-1">
@@ -470,13 +576,16 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
                           : <span className="text-xs text-muted-foreground">Optional</span>}
                       </div>
                     </TableCell>
-                    {pending && (
+                    {showActions && (
                       <TableCell className="whitespace-nowrap py-2 text-right align-top">
                         <div className="inline-flex items-center">
+                          {guidanceEditable && <Button variant="ghost" size="icon" className="size-7" onClick={() => setGuidanceFor(field)} aria-label={`Hint and translations for ${field.label}`} title="Hint and translations"><Languages /></Button>}
+                          {pending && (<>
                           <Button variant="ghost" size="icon" className="size-7" disabled={moving || index === 0} onClick={() => move(index, -1)} aria-label={`Move ${field.label} up`}><ArrowUp /></Button>
                           <Button variant="ghost" size="icon" className="size-7" disabled={moving || index === data.fields.length - 1} onClick={() => move(index, 1)} aria-label={`Move ${field.label} down`}><ArrowDown /></Button>
                           <Button variant="ghost" size="icon" className="size-7" onClick={() => setFieldEditor({ open: true, field })} aria-label={`Edit ${field.label}`}><Pencil /></Button>
                           <Button variant="ghost" size="icon" className="size-7 text-destructive hover:bg-destructive-soft" disabled={data.fields.length === 1} onClick={() => setToDelete(field)} aria-label={`Remove ${field.label}`}><Trash2 /></Button>
+                          </>)}
                         </div>
                       </TableCell>
                     )}
@@ -546,9 +655,35 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-center gap-2">
+              <ClipboardList className="size-4 text-muted-foreground" />
+              <CardTitle>Preparation checklist</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {guidanceEditable ? (
+                <>
+                  <p className="mb-3 text-[13px] text-muted-foreground">What a learner should have ready before starting. Learners see every example labelled as fictional.</p>
+                  <ChecklistEditor key={data.id} initial={data.checklist ?? []} onSave={storeChecklist} />
+                </>
+              ) : (data.checklist ?? []).length ? (
+                <ol className="list-decimal space-y-1 pl-5 text-sm">{data.checklist.map((item) => <li key={item.position}>{item.description}</li>)}</ol>
+              ) : (
+                <p className="text-sm text-muted-foreground">No checklist.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
+      <GuidanceEditor
+        field={guidanceFor}
+        languages={data.guidance_languages}
+        open={guidanceFor !== null}
+        onOpenChange={(open) => !open && setGuidanceFor(null)}
+        onSave={(guidance) => saveGuidance(guidanceFor, guidance)}
+      />
       <FormPreview form={data} open={previewing} onOpenChange={setPreviewing} check={api.checkPreviewAnswers} />
 
       <FieldEditor open={fieldEditor.open} field={fieldEditor.field} onOpenChange={(open) => setFieldEditor((f) => ({ ...f, open }))} onSave={saveField} />
@@ -562,6 +697,22 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
           <AlertDialogFooter>
             <AlertDialogCancel>Keep field</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => removeField(toDelete)}>Remove field</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{data.title}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every version of this form leaves PracticeMode. If learners have practised any version, it is removed from the catalog
+              and the review queue instead, and they keep their attempts and results. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep form</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={remove}>Delete form</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

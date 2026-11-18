@@ -310,3 +310,47 @@ test('on-page copilot appears on form pages and is never extracted as part of th
   const doc = await exportDoc(env, ctx.tabId);
   expect(fieldLabels(doc.steps[0])).toEqual(['First Name', 'Last Name', 'Email', 'Phone', 'Date of Birth']);
 });
+
+test('job page: "Apply now" is clicked once to open the form, never the code box or the final submit', async () => {
+  const { doc, state, dialogs, page } = await extract(`${env.base}/test17_apply_entry.html`);
+  expect(state.completionReason).toBe('reached_final_step');
+  expect(doc.extraction.openedWith).toMatchObject({ action: 'Apply now', by: 'extension' });
+  expect(doc.steps.map((s) => s.title)).toEqual(['Your details', 'Experience']);
+  expect(fieldLabels(doc.steps[0])).toEqual(['Full name', 'Email', 'Preferred shift']);
+  expect(doc.unvisitedSteps[0].reason).toContain('Submit application');
+  // The site search and the referral code are not part of the application.
+  expect(JSON.stringify(doc)).not.toContain('Referral code');
+  expect(await page.locator('#ref').inputValue()).toBe('');
+  expect(dialogs).toEqual([]);
+  assertValidExport(doc);
+});
+
+test('job page: an "Apply" link that opens a new tab is followed in the same tab', async () => {
+  const { doc, state, dialogs } = await extract(`${env.base}/test18_apply_link.html`);
+  expect(state.completionReason).toBe('reached_final_step');
+  expect(doc.extraction.openedWith.action).toBe('Apply for this job');
+  expect(doc.steps).toHaveLength(1);
+  expect(doc.steps[0].url).toContain('test18_apply_form.html');
+  expect(fieldLabels(doc.steps[0])).toEqual(['Full name', 'Branch', 'Why this role?']);
+  // On the form page, "Apply" sends the form: it is the final action, never clicked.
+  expect(doc.unvisitedSteps[0].reason).toContain('Apply');
+  expect(dialogs).toEqual([]);
+});
+
+test('production job page: nothing is clicked before consent; assisted mode asks the user to open the form', async () => {
+  const auto = await extract(`${PRODUCTION_ORIGIN}/test17_apply_entry.html`);
+  expect(auto.state.status).toBe('awaiting_consent');
+  expect(await auto.page.locator('#application').isHidden()).toBe(true);
+  await command(env, auto.tabId, 'stop');
+
+  const { state, page, tabId } = await extract(`${PRODUCTION_ORIGIN}/test17_apply_entry.html`, { mode: 'assisted', until: ['awaiting_user'] });
+  expect(state.blocker).toMatchObject({ type: 'entry_action', action: 'Apply now' });
+  expect(state.steps).toHaveLength(0);
+  expect(await page.locator('#application').isHidden()).toBe(true);
+  await page.click('.apply-entry');
+  await expect.poll(async () => (await getState(env, tabId)).steps.length, { timeout: 15_000 }).toBe(1);
+  const doc = await exportDoc(env, tabId);
+  expect(doc.extraction.openedWith).toMatchObject({ action: 'Apply now', by: 'user' });
+  expect(fieldLabels(doc.steps[0])).toEqual(['Full name', 'Email', 'Preferred shift']);
+  await command(env, tabId, 'stop');
+});

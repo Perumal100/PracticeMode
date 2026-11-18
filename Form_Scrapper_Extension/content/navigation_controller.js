@@ -203,5 +203,19 @@
     };
   }
 
-  PM.navigationController = { advance, waitForStepChange, currentIdentity, quickTitle };
+  /**
+   * Open the form behind an entry button such as "Apply now". A link that
+   * would open a new tab is followed in this tab, where the extraction runs.
+   */
+  function openEntry(el) {
+    const link = el.closest?.('a[href]');
+    const href = link?.href || '';
+    if (link && /^https?:/i.test(href) && (link.target === '_blank' || /noopener|noreferrer/.test(link.rel || ''))) {
+      location.assign(href);
+      return;
+    }
+    el.click();
+  }
+
+  PM.navigationController = { advance, waitForStepChange, currentIdentity, quickTitle, openEntry };
 })();

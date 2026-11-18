@@ -109,6 +109,7 @@
       detected: { total: null, titles: [] },
       navigation: [],
       pendingNavigation: null,
+      entry: null, // the "Apply" button that opened the form, if one did
       conditionalLogic: [],
       unvisitedSteps: [],
       warnings: [],

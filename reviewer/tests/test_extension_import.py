@@ -51,6 +51,20 @@ class ExtensionImportTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertFalse(PracticeForm.objects.exists())
 
+    def test_import_links_open_learner_requests_for_the_same_page(self):
+        from form_requests.models import FormRequest
+
+        learner = User.objects.create_user(username="maya")
+        learner.groups.add(Group.objects.get_or_create(name="LEARNER")[0])
+        request = FormRequest.objects.create(learner=learner, url="http://localhost:4317/library/", source_key="http://localhost:4317/library")
+        other = FormRequest.objects.create(learner=learner, url="http://localhost:4317/other", source_key="http://localhost:4317/other")
+        response = self.post(EXTENSION_ORIGIN)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        request.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual((request.status, str(request.form_id)), ("LINKED", response.data["id"]))
+        self.assertEqual(other.status, "OPEN")
+
 
 class ImportContractTests(TestCase):
     """API-15 rules that keep imported forms practisable and reviewed once."""

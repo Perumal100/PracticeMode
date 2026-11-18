@@ -18,6 +18,9 @@ class Hint(models.Model):
     field = models.ForeignKey("reviewer.FormField", related_name="hints", on_delete=models.CASCADE)
     language_code = models.CharField(max_length=16, default=ORIGINAL)
     text = models.TextField()
+    # An AI draft stays hidden from learners until a Form Reviewer approves it.
+    ai_generated = models.BooleanField(default=False)
+    approved = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["language_code"]
@@ -38,6 +41,8 @@ class Translation(models.Model):
     language_code = models.CharField(max_length=16)
     translated_label = models.CharField(max_length=300, blank=True)
     guidance_text = models.TextField(blank=True)
+    ai_generated = models.BooleanField(default=False)
+    approved = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["language_code"]

@@ -541,6 +541,8 @@
 
     for (const el of candidates) {
       if (consumed.has(el)) continue;
+      // A site's own search box (a search landmark) is never part of the form.
+      if (el.closest('[role="search"]')) continue;
       let field = null;
       try {
         const role = el.getAttribute('role');

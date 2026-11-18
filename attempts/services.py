@@ -1,5 +1,5 @@
 from django.db import DatabaseError, transaction
-from django.db.models import F, prefetch_related_objects
+from django.db.models import Count, F, Q, prefetch_related_objects
 from django.utils import timezone
 
 from guidance.models import Hint
@@ -8,6 +8,13 @@ from reviewer.models import FormField, FormStatus, PracticeForm
 from .errors import AttemptError
 from .models import Answer, Attempt, ProgressCounter
 from .validation import check_schema, validate_draft, validation_feedback
+
+
+def _open_for_answers(attempt):
+    if attempt.status == Attempt.Status.COMPLETED:
+        raise AttemptError("ATTEMPT_COMPLETED", "Completed attempts cannot be edited.", 409)
+    if attempt.practice_form.status == FormStatus.WITHDRAWN:
+        raise AttemptError("FORM_REMOVED", "A Form Reviewer removed this form. Your saved answers are kept.", 409)
 
 
 def _owned_attempt(learner, attempt_id, lock=False):
@@ -53,8 +60,7 @@ def save_answer(learner, attempt_id, field_id, value):
     try:
         with transaction.atomic():
             attempt = _owned_attempt(learner, attempt_id, lock=True)
-            if attempt.status == Attempt.Status.COMPLETED:
-                raise AttemptError("ATTEMPT_COMPLETED", "Completed attempts cannot be edited.", 409)
+            _open_for_answers(attempt)
             try:
                 field = FormField.objects.get(pk=field_id)
             except FormField.DoesNotExist:
@@ -77,6 +83,7 @@ def complete_attempt(learner, attempt_id):
             attempt = _owned_attempt(learner, attempt_id, lock=True)
             if attempt.status == Attempt.Status.COMPLETED:
                 return attempt, False
+            _open_for_answers(attempt)
             fields = list(attempt.practice_form.fields.all())
             answers = dict(attempt.answers.values_list("field_id", "value"))
             attempt.validation_feedback = validation_feedback(fields, answers)
@@ -104,7 +111,7 @@ def record_hint_view(learner, attempt_id, field_id):
                 raise AttemptError("FIELD_NOT_FOUND", "The field does not exist.", 404) from None
             if field.practice_form_id != attempt.practice_form_id:
                 raise AttemptError("FIELD_FORM_MISMATCH", "The field does not belong to this attempt's form.", 400)
-            if not Hint.objects.filter(field=field).exists():
+            if not Hint.objects.filter(field=field, approved=True).exists():
                 raise AttemptError("HINT_NOT_FOUND", "This question has no hint.", 404)
             ProgressCounter.objects.filter(attempt=attempt).update(
                 hint_view_count=F("hint_view_count") + 1, updated_at=timezone.now(),
@@ -112,3 +119,16 @@ def record_hint_view(learner, attempt_id, field_id):
             return ProgressCounter.objects.get(attempt=attempt).hint_view_count
     except (DatabaseError, ProgressCounter.DoesNotExist):
         raise AttemptError("HINT_VIEW_FAILED", "The hint view could not be recorded.", 503) from None
+
+
+def attempt_history(learner):
+    """Every attempt of this learner, newest first, on any version of any form."""
+    try:
+        return list(
+            Attempt.objects.filter(learner=learner)
+            .select_related("practice_form")
+            .annotate(answered_count=Count("answers", filter=~Q(answers__value=None)))
+            .order_by("-started_at", "id")
+        )
+    except DatabaseError:
+        raise AttemptError("HISTORY_UNAVAILABLE", "Your practice history could not be loaded. Please retry.", 503) from None

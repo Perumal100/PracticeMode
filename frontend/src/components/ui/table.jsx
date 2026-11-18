@@ -11,6 +11,6 @@ export const TableHeader = ({ className, ...props }) => <thead className={cn('[&
 export const TableBody = ({ className, ...props }) => <tbody className={cn('[&_tr:last-child]:border-0', className)} {...props} />;
 export const TableRow = ({ className, ...props }) => <tr className={cn('border-b transition-colors hover:bg-muted/50', className)} {...props} />;
 export const TableHead = ({ className, ...props }) => (
-  <th className={cn('h-10 px-4 text-left align-middle text-xs font-medium uppercase tracking-wide text-muted-foreground whitespace-nowrap', className)} {...props} />
+  <th className={cn('h-10 px-4 text-left align-middle text-[13px] font-medium text-muted-foreground whitespace-nowrap', className)} {...props} />
 );
 export const TableCell = ({ className, ...props }) => <td className={cn('px-4 py-3 align-middle', className)} {...props} />;

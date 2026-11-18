@@ -1,4 +1,5 @@
 from django.db import DatabaseError, IntegrityError, transaction
+from django.db.models import Q
 
 from attempts.models import Attempt
 
@@ -58,16 +59,60 @@ def get_request(user, role, request_id):
 
 
 def can_read(user, role, request):
-    return role == "LEARNER" and request.learner_id == user.pk
+    """DD-02: the owning learner, the assigned instructor, or any instructor while nobody has accepted."""
+    if role == "LEARNER":
+        return request.learner_id == user.pk
+    if role == "INSTRUCTOR":
+        return request.instructor_id == user.pk or request.status == Status.REQUESTED
+    return False
+
+
+def instructor_requests(instructor, status=None):
+    """API-12: every request still waiting for an instructor, plus this instructor's own."""
+    requests = _requests().filter(Q(status=Status.REQUESTED) | Q(instructor=instructor)).order_by("requested_slot", "created_at")
+    return requests.filter(status=status) if status else requests
 
 
 def cancel_request(user, role, request_id):
     with transaction.atomic():
         request = _locked(request_id)
-        if not can_read(user, role, request):
+        # An instructor may cancel only a session they accepted, never an unassigned request.
+        allowed = request.instructor_id == user.pk if role == "INSTRUCTOR" else can_read(user, role, request)
+        if not allowed:
             raise _forbidden()
         if request.status not in AssistanceRequest.OPEN:
             raise AssistanceError("REQUEST_CLOSED", "This request is already closed.", 409)
         request.status = Status.CANCELLED
+        request.save(update_fields=["status", "updated_at"])
+    return request
+
+
+def schedule_request(instructor, request_id, meeting_details):
+    """API-17: accept a waiting request, or update the details of one's own session."""
+    with transaction.atomic():
+        request = _locked(request_id)
+        if request.status == Status.SCHEDULED and request.instructor_id != instructor.pk:
+            raise AssistanceError("REQUEST_ALREADY_SCHEDULED", "Another instructor has already accepted this request.", 409)
+        if request.status not in AssistanceRequest.OPEN:
+            if request.instructor_id != instructor.pk:
+                raise _forbidden()
+            raise AssistanceError("REQUEST_CLOSED", "This request is already closed.", 409)
+        request.instructor = instructor
+        request.meeting_details = meeting_details
+        request.status = Status.SCHEDULED
+        request.save(update_fields=["instructor", "meeting_details", "status", "updated_at"])
+    return request
+
+
+def complete_request(instructor, request_id):
+    with transaction.atomic():
+        request = _locked(request_id)
+        if request.instructor_id != instructor.pk:
+            if request.status == Status.REQUESTED:
+                raise AssistanceError("REQUEST_NOT_SCHEDULED", "Accept the request before marking it as completed.", 409)
+            raise _forbidden()
+        if request.status != Status.SCHEDULED:
+            raise AssistanceError("REQUEST_CLOSED", "This request is already closed.", 409)
+        request.status = Status.COMPLETED
         request.save(update_fields=["status", "updated_at"])
     return request

@@ -140,6 +140,7 @@ class CatalogTests(TestCase):
         self.assertEqual(response.json(), {
             "id": str(self.form.pk), "title": "Housing application", "status": "APPROVED",
             "categories": ["Housing", "Government"],
+            "version": 1, "replaced_by": None,
             "guidance_languages": [
                 {"code": "en", "name": "English"}, {"code": "es", "name": "Español"}, {"code": "zh", "name": "中文"},
                 {"code": "hi", "name": "हिन्दी"}, {"code": "ar", "name": "العربية"},

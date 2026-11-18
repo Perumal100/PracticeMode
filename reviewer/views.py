@@ -6,8 +6,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from attempts.validation import validation_feedback
+from form_requests.services import link_open_requests
+from guidance.review import pending_drafts
 from guidance.services import copy_guidance
 
+from .lineage import remove_family
 from .models import FormField, FormStatus, PracticeForm, ReviewDecision, ReviewNotification
 from .permissions import IsFormReviewer
 from .serializers import (
@@ -86,6 +89,18 @@ class ReviewFormDetailView(APIView):
                 PracticeFormDetailSerializer(practice_form).data
             )
 
+    def delete(self, request, form_id):
+        """Delete a form and every version of it. Forms learners practised are withdrawn instead, keeping their history."""
+        with transaction.atomic():
+            try:
+                practice_form = PracticeForm.objects.select_for_update().get(id=form_id)
+            except PracticeForm.DoesNotExist:
+                return Response({"error": "FORM_NOT_FOUND"}, status=status.HTTP_404_NOT_FOUND)
+            if practice_form.status == FormStatus.WITHDRAWN:
+                raise Conflict(detail="This form has already been removed.")
+            outcome = remove_family(practice_form)
+        return Response({"outcome": outcome})
+
 
 
 class ReviewDecisionView(APIView):
@@ -104,6 +119,12 @@ class ReviewDecisionView(APIView):
 
             decision = request_data.validated_data["decision"]
             is_approved = decision == "APPROVE"
+            if is_approved and (drafts := pending_drafts(practice_form)):
+                return Response({
+                    "error": "AI_DRAFTS_PENDING",
+                    "message": f"Review the {drafts} AI-drafted hint{'s' if drafts != 1 else ''} or translation{'s' if drafts != 1 else ''} first: approve or discard them.",
+                    "count": drafts,
+                }, status=status.HTTP_409_CONFLICT)
             ReviewDecision.objects.create(
                 practice_form=practice_form,
                 reviewer=request.user,
@@ -162,6 +183,7 @@ class FormExtractionView(APIView):
                 for field in payload["fields"]
             ])
             ReviewNotification.objects.create(practice_form=practice_form)
+            link_open_requests(practice_form)
         practice_form = PracticeForm.objects.prefetch_related("fields").get(id=practice_form.id)
         return Response(PracticeFormDetailSerializer(practice_form).data, status=status.HTTP_201_CREATED)
 

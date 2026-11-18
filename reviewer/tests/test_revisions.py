@@ -62,14 +62,24 @@ class FormRevisionTests(TestCase):
         self.assertEqual(self.client.get(reverse("review-form-detail", kwargs={"form_id": self.form.id})).data["replaced_by"], revision["id"])
         catalog = self.learner_client.get("/api/forms").data
         self.assertEqual([f["id"] for f in catalog], [str(revision["id"])])
-        gone = self.learner_client.get(f"/api/forms/{self.form.id}")
+        # A learner who never practised the old version is sent to the new one.
+        newcomer = User.objects.create_user(username="newcomer")
+        newcomer.groups.add(Group.objects.get(name="LEARNER"))
+        newcomer_client = APIClient()
+        newcomer_client.force_authenticate(newcomer)
+        gone = newcomer_client.get(f"/api/forms/{self.form.id}")
         self.assertEqual((gone.status_code, gone.data["error"], gone.data["replacedBy"]), (410, "FORM_REPLACED", revision["id"]))
+        # The learner who practised it can still open it, read-only, with a pointer to the new version.
+        kept = self.learner_client.get(f"/api/forms/{self.form.id}")
+        self.assertEqual((kept.status_code, kept.data["status"], kept.data["version"], kept.data["replaced_by"]),
+                         (200, "SUPERSEDED", 1, str(revision["id"])))
         self.assertEqual(Attempt.objects.get(id=attempt.id).answers.get().value, "Alex")
 
         # A second revision replaces the first; old links lead to the newest.
         second = self.revise(PracticeForm.objects.get(id=revision["id"])).data
         self.decide(second["id"], "APPROVE")
-        self.assertEqual(self.learner_client.get(f"/api/forms/{self.form.id}").data["replacedBy"], second["id"])
+        self.assertEqual(newcomer_client.get(f"/api/forms/{self.form.id}").data["replacedBy"], second["id"])
+        self.assertEqual(self.learner_client.get(f"/api/forms/{second['id']}").data["version"], 3)
 
     def test_rejecting_the_revision_leaves_the_original_published(self):
         revision = self.revise().data

@@ -15,12 +15,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { NativeSelect } from '@/components/ui/input.jsx';
 import { Progress } from '@/components/ui/progress.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
+import { attemptForForm, listMyAttempts as defaultListMyAttempts } from '../../api/attempts.js';
 import { getForm as defaultGetForm } from '../../api/catalog.js';
 import AssistancePanel from '../assistance/AssistancePanel.jsx';
 import { AutosaveStatus, useAutosave, useResumeAttempt } from '../autosave/index.js';
 import { ORIGINAL_LANGUAGE, formHasLanguage, guidanceFor, rememberLanguage, storedLanguage } from './guidance.js';
 import PreparationChecklist from './PreparationChecklist.jsx';
 import Question, { messagesByField } from './Question.jsx';
+import VersionHistory from './VersionHistory.jsx';
 import { completeAttempt as defaultCompleteAttempt, recordHintView as defaultRecordHintView, startAttempt as defaultStartAttempt } from './practiceApi.js';
 import { rememberAttempt, storedAttempt } from './attemptStore.js';
 
@@ -29,6 +31,7 @@ const FORM_ERRORS = {
   404: 'This practice form does not exist.',
   410: 'This form was updated to match the real form. Practise the new version instead.',
 };
+const FORM_REMOVED = 'A Form Reviewer removed this form, so it can no longer be practised.';
 const START_ERRORS = {
   403: 'This form is not available for practice. It may still be awaiting review or may have been rejected.',
   422: 'This form contains questions PracticeMode cannot check yet, so it cannot be practised.',
@@ -48,11 +51,14 @@ function LanguagePicker({ languages, value, onChange }) {
   );
 }
 
-export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {} }) {
+// `attemptId` opens one attempt from the learner's history; otherwise the
+// account's newest attempt on this form is resumed.
+export default function PracticeForm({ formId, attemptId, user, onBack, onOpenForm, api = {} }) {
   const getForm = api.getForm ?? defaultGetForm;
   const startAttempt = api.startAttempt ?? defaultStartAttempt;
+  const listMyAttempts = api.listMyAttempts ?? defaultListMyAttempts;
   const [form, setForm] = useState({ status: 'loading', data: null, error: null });
-  const [attempt, setAttempt] = useState(() => storedAttempt(user.id, formId));
+  const [attempt, setAttempt] = useState(() => (attemptId ? { id: attemptId, status: 'IN_PROGRESS' } : undefined));
   const [start, setStart] = useState({ busy: false, error: null });
   const [languageCode, setLanguageCode] = useState(storedLanguage);
 
@@ -62,11 +68,27 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
       (data) => !cancelled && setForm({ status: 'ready', data, error: null }),
       (error) => !cancelled && setForm({
         status: 'error', data: null, replacedBy: error?.body?.replacedBy,
-        error: FORM_ERRORS[error?.status] ?? 'The form could not be loaded. Please try again.',
+        error: error?.code === 'FORM_REMOVED' ? FORM_REMOVED : FORM_ERRORS[error?.status] ?? 'The form could not be loaded. Please try again.',
       }),
     );
     return () => { cancelled = true; };
   }, [formId, getForm]);
+
+  useEffect(() => {
+    if (attempt !== undefined) return undefined;
+    let cancelled = false;
+    listMyAttempts().then(
+      (history) => {
+        if (cancelled) return;
+        const found = attemptForForm(history, formId);
+        setAttempt(found ? { id: found.id, status: found.status } : null);
+      },
+      // Offline or failing history: fall back to what this browser remembers.
+      () => !cancelled && setAttempt(storedAttempt(user.id, formId)),
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formId, listMyAttempts, user.id]);
 
   function openAttempt(id, status = 'IN_PROGRESS') {
     rememberAttempt(user.id, formId, id, status);
@@ -86,7 +108,7 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
 
   const breadcrumb = [{ label: 'Practice forms', onClick: onBack }, { label: form.data?.title ?? 'Form' }];
 
-  if (form.status === 'loading') {
+  if (form.status === 'loading' || (form.status === 'ready' && attempt === undefined)) {
     return (
       <>
         <PageHeader title={<Skeleton className="h-7 w-64" />} breadcrumb={[{ label: 'Practice forms', onClick: onBack }, { label: '…' }]} />
@@ -114,6 +136,8 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
   const languages = form.data.guidance_languages ?? [];
   const chosen = languages.find((item) => item.code === languageCode) ?? { code: ORIGINAL_LANGUAGE, name: 'English' };
   const translating = chosen.code !== ORIGINAL_LANGUAGE;
+  const replaced = form.data.status === 'SUPERSEDED';
+  const removed = form.data.status === 'WITHDRAWN';
   const translated = translating && formHasLanguage(fields, chosen.code);
   const language = { ...chosen, partial: translated };
 
@@ -128,9 +152,24 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
         title={form.data.title}
         breadcrumb={breadcrumb}
         meta={attempt && <StatusBadge status={attempt.status} />}
-        description={`${fields.length} question${fields.length === 1 ? '' : 's'} · ${required} required`}
+        description={`${fields.length} question${fields.length === 1 ? '' : 's'}, ${required} required${form.data.version ? `, version ${form.data.version}` : ''}`}
         actions={languages.length > 1 && <LanguagePicker languages={languages} value={chosen.code} onChange={chooseLanguage} />}
       />
+      {replaced && (
+        <Alert variant="info" className="mb-4">
+          <RefreshCw />
+          <div className="flex flex-1 flex-wrap items-center justify-between gap-3">
+            <span>This is version {form.data.version}, which you practised. The form has since been updated to match the real form.</span>
+            {onOpenForm && <Button size="sm" variant="outline" onClick={() => onOpenForm(form.data.replaced_by)}>Open the current version</Button>}
+          </div>
+        </Alert>
+      )}
+      {removed && (
+        <Alert variant="warning" className="mb-4">
+          <AlertCircle />A Form Reviewer removed this form. Your answers and results are kept, but they can no longer be changed or submitted.
+        </Alert>
+      )}
+      {(form.data.version > 1 || replaced) && <div className="mb-4"><VersionHistory formId={form.data.id} version={form.data.version} getFormVersions={api.getFormVersions} /></div>}
       {translating && !translated && (
         <Alert variant="info" className="mb-4">
           <Languages />This form has no guidance in {chosen.name} yet. Labels and hints are shown in the original language.
@@ -142,6 +181,8 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
           attemptId={attempt.id}
           form={form.data}
           language={language}
+          locked={removed}
+          canRestart={!replaced && !removed}
           api={api}
           onCompleted={() => openAttempt(attempt.id, 'COMPLETED')}
           onRestart={() => openAttempt(null)}
@@ -177,9 +218,13 @@ export default function PracticeForm({ formId, user, onBack, onOpenForm, api = {
                 <p className="text-muted-foreground">This is a practice copy. Your answers save automatically and are never sent to the real website.</p>
               </div>
               {start.error && <Alert variant="destructive"><AlertCircle />{start.error}</Alert>}
-              <Button className="w-full" size="lg" onClick={begin} disabled={start.busy}>
-                {start.busy && <Loader2 className="animate-spin" />}Start practice
-              </Button>
+              {replaced || removed ? (
+                <p className="text-sm font-medium">This version can no longer be started.</p>
+              ) : (
+                <Button className="w-full" size="lg" onClick={begin} disabled={start.busy}>
+                  {start.busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}Start practice
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -192,12 +237,12 @@ function SaveSummary({ statuses }) {
   const states = Object.values(statuses).map((s) => s.state);
   const failed = states.filter((s) => s === 'error').length;
   if (failed) return <p className="flex items-center gap-2 text-sm font-medium text-destructive"><CloudOff className="size-4" />{failed} answer{failed === 1 ? '' : 's'} not saved</p>;
-  if (states.some((s) => s === 'pending' || s === 'saving')) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Saving…</p>;
+  if (states.some((s) => s === 'pending' || s === 'saving')) return <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin motion-reduce:animate-none" />Saving…</p>;
   if (states.length) return <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 className="size-4" />All changes saved</p>;
   return <p className="text-sm text-muted-foreground">Answers save automatically as you go.</p>;
 }
 
-function AttemptView({ attemptId, form, language, api, onCompleted, onRestart }) {
+function AttemptView({ attemptId, form, language, locked = false, canRestart = true, api, onCompleted, onRestart }) {
   const completeAttempt = api.completeAttempt ?? defaultCompleteAttempt;
   const recordHintView = api.recordHintView ?? defaultRecordHintView;
   const resume = useResumeAttempt(attemptId, api.getAttempt ? { getAttempt: api.getAttempt } : undefined);
@@ -208,7 +253,7 @@ function AttemptView({ attemptId, form, language, api, onCompleted, onRestart })
   const completed = resume.isCompleted || Boolean(result);
   const { statuses, queueSave, flush, retry } = useAutosave({
     attemptId,
-    enabled: resume.status === 'ready' && !completed,
+    enabled: resume.status === 'ready' && !completed && !locked,
     ...(api.saveAnswer ? { saveAnswer: api.saveAnswer } : {}),
     ...(api.debounceMs !== undefined ? { debounceMs: api.debounceMs } : {}),
   });
@@ -323,7 +368,7 @@ function AttemptView({ attemptId, form, language, api, onCompleted, onRestart })
                 field={field}
                 number={index + 1}
                 value={values[field.id]}
-                disabled={completed}
+                disabled={completed || locked}
                 messages={feedbackByField[field.id]}
                 language={language}
                 onChange={(v) => change(field.id, v)}
@@ -351,17 +396,19 @@ function AttemptView({ attemptId, form, language, api, onCompleted, onRestart })
               : <SaveSummary statuses={statuses} />}
             {submit.error && <Alert variant="destructive"><AlertCircle />{submit.error}</Alert>}
           </CardContent>
-          <CardFooter>
-            {completed ? (
-              <Button variant="outline" className="w-full" onClick={onRestart}><RotateCcw />Start a new attempt</Button>
-            ) : (
-              <Button type="submit" className="w-full" disabled={submit.busy}>
-                {submit.busy && <Loader2 className="animate-spin" />}{submit.busy ? 'Submitting…' : 'Submit attempt'}
-              </Button>
-            )}
-          </CardFooter>
+          {!locked && !(completed && !canRestart) && (
+            <CardFooter>
+              {completed ? (
+                <Button variant="outline" className="w-full" onClick={onRestart}><RotateCcw />Start a new attempt</Button>
+              ) : (
+                <Button type="submit" className="w-full" disabled={submit.busy}>
+                  {submit.busy && <Loader2 className="animate-spin motion-reduce:animate-none" />}{submit.busy ? 'Submitting…' : 'Submit attempt'}
+                </Button>
+              )}
+            </CardFooter>
+          )}
         </Card>
-        <div className="mt-3"><AssistancePanel attemptId={attemptId} api={api.assistance} /></div>
+        {!locked && <div className="mt-3"><AssistancePanel attemptId={attemptId} api={api.assistance} /></div>}
         <div className="mt-3"><PreparationChecklist items={form.checklist} collapsible /></div>
         <p className="mt-3 flex gap-2 px-1 text-xs text-muted-foreground">
           <ShieldCheck className="size-3.5 shrink-0" />Practice copy. Nothing is sent to the real website.

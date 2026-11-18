@@ -85,6 +85,7 @@
         state: state.status,
         completionReason: state.completionReason || null,
         mode: state.mode,
+        ...(state.entry ? { openedWith: { action: state.entry.action, url: state.entry.url, by: state.entry.by } } : {}),
         startedAt: state.startedAt ? new Date(state.startedAt).toISOString() : null,
         finishedAt: state.finishedAt ? new Date(state.finishedAt).toISOString() : null,
         extractor: EXTRACTOR,

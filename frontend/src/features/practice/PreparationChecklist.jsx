@@ -30,7 +30,7 @@ export default function PreparationChecklist({ items = [], collapsible = false }
   if (collapsible) {
     return (
       <details className="group rounded-lg border bg-card shadow-xs">
-        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-5 py-3 text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
           <ClipboardList className="size-4 text-muted-foreground" />Preparation checklist
           <span className="ml-auto text-xs font-normal text-muted-foreground group-open:hidden">Show</span>
           <span className="ml-auto hidden text-xs font-normal text-muted-foreground group-open:inline">Hide</span>

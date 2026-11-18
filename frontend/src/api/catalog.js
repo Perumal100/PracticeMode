@@ -12,3 +12,8 @@ export function listForms({ keyword = '', categories = [] } = {}) {
 export function getForm(formId) {
   return apiRequest(`/api/forms/${encodeURIComponent(formId)}`);
 }
+
+// Published versions of a form, newest first, each with what changed.
+export function getFormVersions(formId) {
+  return apiRequest(`/api/forms/${encodeURIComponent(formId)}/versions`);
+}

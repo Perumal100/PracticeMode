@@ -27,7 +27,7 @@ export function Tabs({ value, onValueChange, items, label, className }) {
             onClick={() => onValueChange(item.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
             className={cn(
-              'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium whitespace-nowrap transition-all',
+              'inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-[13px] font-medium whitespace-nowrap transition-[color,background-color,box-shadow] motion-reduce:transition-none',
               selected ? 'bg-card text-foreground shadow-xs' : 'hover:text-foreground',
             )}
           >
