@@ -66,10 +66,20 @@ class FormRequestTests(TestCase):
 
     def test_a_learner_cannot_request_the_same_page_twice_while_it_is_open(self):
         self.ask()
-        response = self.ask(url=f"{LINK}/?ref=mail")
+        response = self.ask(url=f"{LINK}/")
         self.assertEqual((response.status_code, response.data["error"]), (409, "REQUEST_ALREADY_OPEN"))
         # Another learner may ask for the same form.
         self.assertEqual(self.ask(self.noor).status_code, 201)
+
+    def test_query_parameters_keep_distinct_forms_from_sharing_a_request_key(self):
+        first = self.ask(url=f"{LINK}?posting=101")
+        second = self.ask(url=f"{LINK}?posting=202")
+        self.assertEqual((first.status_code, second.status_code), (201, 201))
+        self.assertEqual(FormRequest.objects.count(), 2)
+        self.assertNotEqual(
+            FormRequest.objects.get(pk=first.data["requestId"]).source_key,
+            FormRequest.objects.get(pk=second.data["requestId"]).source_key,
+        )
 
     def test_a_form_already_published_is_offered_instead_of_a_request(self):
         published = self.form(status="APPROVED")
@@ -129,7 +139,7 @@ class FormRequestTests(TestCase):
 
     def test_reviewers_see_requests_grouped_by_page_without_the_learner(self):
         self.ask()
-        self.ask(self.noor, url=f"{LINK}?utm=1")
+        self.ask(self.noor, url=f"{LINK}/")
         rows = self.rita.get(REVIEW, {"status": "OPEN"}).data
         self.assertEqual([row["requestCount"] for row in rows], [2, 2])
         self.assertNotIn("maya", str(rows))

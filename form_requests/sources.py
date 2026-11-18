@@ -9,6 +9,6 @@ def clean_url(url):
 
 
 def source_key(url):
-    """Scheme, host and path: query strings and trailing slashes do not make a different form."""
+    """A normalized form URL where query parameters still distinguish separate forms."""
     parts = urlsplit(url.strip())
-    return f"{parts.scheme.lower()}://{parts.netloc.lower()}{parts.path.rstrip('/')}"
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), parts.query, ""))
