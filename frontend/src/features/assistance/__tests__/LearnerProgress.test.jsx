@@ -77,4 +77,72 @@ describe('US-22 learner progress', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('You can only see progress for learners whose request you accepted.');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
+
+    it('refreshes progress while keeping the selected filters', async () => {
+    let refreshed = false;
+    const api = vi.fn((filters) => Promise.resolve(
+      Object.keys(filters).length
+        ? [{ ...submitted, validationErrorCount: refreshed ? 7 : 3 }]
+        : [unfinished, submitted]
+    ));
+    const { onQueryChange } = setup({
+      query: { minErrors: '2', formId: 'f2' },
+      listProgress: api,
+    });
+
+    const row = (await screen.findByText(
+      'Course registration', { selector: 'td' }
+    )).closest('tr');
+    expect(within(row).getAllByRole('cell')[3]).toHaveTextContent('3');
+
+    api.mockClear();
+    refreshed = true;
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    await waitFor(() => {
+      const updatedRow = screen.getByText(
+        'Course registration', { selector: 'td' }
+      ).closest('tr');
+      expect(within(updatedRow).getAllByRole('cell')[3]).toHaveTextContent('7');
+    });
+
+    expect(api).toHaveBeenCalledWith({});
+    expect(api).toHaveBeenCalledWith({ minErrors: '2', formId: 'f2' });
+    expect(screen.getByLabelText('Repeated errors (2 or more)')).toBeChecked();
+    expect(screen.getByLabelText('Practice form')).toHaveValue('f2');
+    expect(onQueryChange).not.toHaveBeenCalled();
+  });
+
+
+    it('retries a failed request and shows progress', async () => {
+    let failed = true;
+    const api = vi.fn((filters) => {
+      if (!Object.keys(filters).length) {
+        return Promise.resolve([unfinished, submitted]);
+      }
+      return failed
+        ? Promise.reject(new Error('Network error'))
+        : Promise.resolve([submitted]);
+    });
+
+    const { onQueryChange } = setup({
+      query: { minErrors: '2' },
+      listProgress: api,
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Learner progress could not be loaded. Please try again.'
+    );
+
+    api.mockClear();
+    failed = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByText(
+      'Course registration', { selector: 'td' }
+    )).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(api).toHaveBeenCalledWith({ minErrors: '2' });
+    expect(onQueryChange).not.toHaveBeenCalled();
+  });
 });
