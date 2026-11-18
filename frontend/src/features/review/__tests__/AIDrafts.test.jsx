@@ -34,22 +34,56 @@ function setup(overrides = {}) {
 }
 
 describe('AI drafts', () => {
-  it('drafts hints, then shows them as drafts waiting for review', async () => {
-    const api = setup();
-    fireEvent.click(await screen.findByRole('button', { name: 'Draft hints with AI' }));
-    await waitFor(() => expect(api.draftGuidance).toHaveBeenCalledWith('f1', 'hints', undefined));
-    expect(await screen.findByText(/2 AI drafts are waiting for your review/)).toBeVisible();
-    expect(screen.getByText('Hint (AI draft); Translated: Español (AI draft)')).toBeVisible();
+  it('drafts hints with their own button, showing progress', async () => {
+    let finish;
+    const draftGuidance = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const api = setup({ draftGuidance });
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft hints' }));
+    const progress = await screen.findByRole('progressbar', { name: 'AI drafting progress' });
+    expect(progress).toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByText(/Writing hints, questions 1 to 1 of 1/)).toBeVisible();
+    finish({ created: 1, updated: 0, skipped: 0, providers: ['Gemini'] });
+    await waitFor(() => expect(screen.queryByRole('progressbar', { name: 'AI drafting progress' })).not.toBeInTheDocument());
+    expect(draftGuidance.mock.calls).toEqual([['f1', 'hints', undefined, ['name']]]);
+    expect(api.getReviewForm).toHaveBeenCalledTimes(2);
   });
 
-  it('drafts translations into the languages chosen', async () => {
-    const api = setup();
-    fireEvent.click(await screen.findByRole('button', { name: 'Draft translations with AI' }));
+  it('drafts translations separately, into the chosen languages', async () => {
+    const draftGuidance = vi.fn().mockResolvedValue({ created: 1, updated: 0, skipped: 0, providers: ['Groq'] });
+    setup({ draftGuidance });
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft translations' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).queryByText('English')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/1 question has no hint yet/)).toBeVisible();
     fireEvent.click(within(dialog).getByLabelText('中文'));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Draft translations' }));
-    await waitFor(() => expect(api.draftGuidance).toHaveBeenCalledWith('f1', 'translations', ['es']));
+    expect(within(dialog).getByText('1 step; progress is shown as each finishes.')).toBeVisible();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start translating' }));
+    await waitFor(() => expect(draftGuidance).toHaveBeenCalledTimes(1));
+    expect(draftGuidance.mock.calls[0]).toEqual(['f1', 'translations', ['es'], ['name']]);
+    expect(await screen.findByText(/2 AI drafts are waiting for your review/)).toBeVisible();
+  });
+
+  it('waits out a rate limit, then tries the same step again', async () => {
+    const draftGuidance = vi.fn()
+      .mockRejectedValueOnce(new ApiError(429, 'AI_RATE_LIMITED', 'Over the limit.', { error: 'AI_RATE_LIMITED', retryAfter: 1 }))
+      .mockResolvedValue({ created: 1, updated: 0, skipped: 0, providers: ['Gemini'] });
+    setup({ draftGuidance });
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft hints' }));
+    expect(await screen.findByText(/Trying this step again in 1 second\./)).toBeVisible();
+    await waitFor(() => expect(draftGuidance).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    await waitFor(() => expect(screen.queryByRole('progressbar', { name: 'AI drafting progress' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('stops after the current step when asked', async () => {
+    let finish;
+    const draftGuidance = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    setup({ draftGuidance });
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft hints' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+    expect(screen.getByRole('button', { name: 'Stopping after this step…' })).toBeDisabled();
+    finish({ created: 1, updated: 0, skipped: 0, providers: ['Gemini'] });
+    await waitFor(() => expect(screen.queryByRole('progressbar', { name: 'AI drafting progress' })).not.toBeInTheDocument());
+    expect(draftGuidance).toHaveBeenCalledTimes(1);
   });
 
   it('the form cannot be approved while drafts wait; approving the drafts allows it', async () => {
@@ -81,9 +115,23 @@ describe('AI drafts', () => {
     expect(within(dialog).getByLabelText(/^Hint/)).toHaveValue('Enter your first and last name.');
   });
 
-  it('explains when the AI services fail or are not set up', async () => {
+  it('explains when the AI services fail, keeping what was drafted', async () => {
     setup({ draftGuidance: vi.fn().mockRejectedValue(new ApiError(502, 'AI_FAILED', 'The AI services could not draft this (Gemini: HTTP 503; Groq: HTTP 401).')) });
-    fireEvent.click(await screen.findByRole('button', { name: 'Draft hints with AI' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft hints' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Gemini: HTTP 503; Groq: HTTP 401');
+    expect(screen.getByRole('alert')).toHaveTextContent('Drafts made before this step are kept.');
+  });
+
+  it('plans translations of hints added after a translation existed', async () => {
+    const { planSteps } = await import('../AIDrafts.jsx');
+    const fields = [
+      { id: 'a', hints: [{ language_code: 'en', text: 'Hint' }], translations: [{ language_code: 'es', translated_label: 'A', guidance_text: '' }] },
+      { id: 'b', hints: [{ language_code: 'en', text: 'Hint' }], translations: [{ language_code: 'es', translated_label: 'B', guidance_text: 'Pista' }] },
+      ...Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, hints: [], translations: [] })),
+    ];
+    const steps = planSteps(fields, { hints: true, languages: [{ code: 'es', name: 'Español' }] });
+    expect(steps.map((s) => [s.task, s.fieldIds.length])).toEqual([['hints', 15], ['hints', 5], ['translations', 15], ['translations', 6]]);
+    expect(steps[2].fieldIds).toContain('a');
+    expect(steps.flatMap((s) => s.fieldIds)).not.toContain('b');
   });
 });

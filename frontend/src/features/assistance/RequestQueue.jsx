@@ -12,8 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs } from '@/components/ui/tabs.jsx';
 import { formatDateTime } from '@/lib/format.js';
 import { listRequests as defaultListRequests } from '../../api/assistance.js';
+import DefaultMeetingLink from '../instructors/DefaultMeetingLink.jsx';
 
 const TABS = [['REQUESTED', 'Waiting'], ['SCHEDULED', 'Accepted by me'], ['COMPLETED', 'Completed'], ['CANCELLED', 'Cancelled']];
+// Completed and cancelled tabs are the instructor's session history.
 const EMPTY = {
   REQUESTED: [Inbox, 'No requests are waiting', 'When a learner asks for help from a practice form, the request appears here for every instructor.'],
   SCHEDULED: [CalendarCheck, 'You have no sessions booked', 'Accept a waiting request to book a session.'],
@@ -38,6 +40,7 @@ export function LearnerName({ request }) {
 }
 
 export default function RequestQueue({ status = 'REQUESTED', onStatusChange, onOpen, api = {} }) {
+  const profileApi = { getOwnProfile: api.getOwnProfile, updateOwnProfile: api.updateOwnProfile };
   const listRequests = api.listRequests ?? defaultListRequests;
   const [state, setState] = useState({ status: 'loading', requests: [], error: null });
   const tab = TABS.some(([value]) => value === status) ? status : 'REQUESTED';
@@ -63,6 +66,7 @@ export default function RequestQueue({ status = 'REQUESTED', onStatusChange, onO
         description="A waiting request is open to every instructor. Once you accept one, only you and the learner can see it."
         actions={<Button variant="outline" onClick={load} disabled={state.status === 'loading'}><RefreshCw />Refresh</Button>}
       />
+      <DefaultMeetingLink {...Object.fromEntries(Object.entries(profileApi).filter(([, v]) => v))} />
       {state.status === 'error' ? (
         <Alert variant="destructive"><AlertCircle />{state.error}</Alert>
       ) : (

@@ -14,6 +14,7 @@ const USERNAME = /^[A-Za-z0-9_.-]{3,30}$/;
 const MIN_PASSWORD = 8;
 
 function signInMessage(error) {
+  if (error?.code?.startsWith?.('INSTRUCTOR_')) return error.message;
   if (error?.status === 401) return 'That username and password do not match a PracticeMode account.';
   if (error?.status === 403) return 'This account has no PracticeMode role. Ask an administrator to assign one.';
   if (error?.status === 0) return 'Could not reach PracticeMode. Check your connection.';
@@ -34,7 +35,7 @@ function field(errors, name) {
   return { 'aria-invalid': errors[name] ? true : undefined, 'aria-describedby': errors[name] ? `${name}-error` : undefined };
 }
 
-export default function SignIn({ onSignedIn, api = {} }) {
+export default function SignIn({ onSignedIn, onInstructorSignUp, api = {} }) {
   const signIn = api.signIn ?? defaultSignIn;
   const register = api.register ?? defaultRegister;
   const [mode, setMode] = useState('signin');
@@ -158,6 +159,12 @@ export default function SignIn({ onSignedIn, api = {} }) {
               {creating ? (busy ? 'Creating account…' : 'Create account') : (busy ? 'Signing in…' : 'Sign in')}
             </Button>
           </form>
+          {onInstructorSignUp && (
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              Teaching or helping learners?{' '}
+              <button type="button" onClick={onInstructorSignUp} className="font-medium text-primary underline-offset-4 hover:underline focus-visible:underline">Request an instructor account</button>
+            </p>
+          )}
         </div>
       </section>
     </div>

@@ -8,6 +8,8 @@ reviewer approves it.
 """
 import json
 import os
+import re
+import time
 import urllib.error
 import urllib.request
 
@@ -40,18 +42,51 @@ def _timeout():
         return 30.0
 
 
-def _gemini(system, prompt):
-    key = os.environ.get("GEMINI_API_KEY")
-    if not key:
-        return None
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# Several models per provider: each has its own free quota, so a rate-limited
+# or retired model is skipped for the next one. Newer accounts cannot use
+# gemini-2.5-flash (404), so later models are ones they can.
+DEFAULT_MODELS = {
+    "Gemini": "gemini-2.5-flash,gemini-flash-lite-latest,gemini-3-flash-preview,gemini-3.1-flash-lite",
+    "Groq": "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b",
+}
+
+
+def _models(name):
+    env = name.upper()
+    raw = os.environ.get(f"{env}_MODELS") or os.environ.get(f"{env}_MODEL") or DEFAULT_MODELS[name]
+    return [model.strip() for model in raw.split(",") if model.strip()]
+
+
+def _keys(env_name):
+    """Every key for a provider: NAME, then NAME_1, NAME_2 and so on, in order.
+
+    Each key (from a separate account) has its own free quota, so when one is
+    rate-limited the next is tried.
+    """
+    numbered = sorted(
+        (int(match.group(1)), value)
+        for name, value in os.environ.items()
+        if (match := re.fullmatch(rf"{env_name}_(\d+)", name))
+    )
+    keys = [os.environ.get(env_name, "")] + [value for _, value in numbered]
+    unique = []
+    for key in (k.strip() for k in keys):
+        if key and key not in unique:
+            unique.append(key)
+    return unique
+
+
+def _gemini(system, prompt, model, key):
+    config = {"responseMimeType": "application/json", "temperature": 0.2}
+    if model.startswith("gemini-2.5"):
+        # Short, structured replies: no time is spent on "thinking".
+        config["thinkingConfig"] = {"thinkingBudget": 0}
     data = _post_json(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
         {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            # Short, structured replies: no time is spent on "thinking".
-            "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2, "thinkingConfig": {"thinkingBudget": 0}},
+            "generationConfig": config,
         },
         {"x-goog-api-key": key},
         _timeout(),
@@ -59,14 +94,11 @@ def _gemini(system, prompt):
     return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
-def _groq(system, prompt):
-    key = os.environ.get("GROQ_API_KEY")
-    if not key:
-        return None
+def _groq(system, prompt, model, key):
     data = _post_json(
         "https://api.groq.com/openai/v1/chat/completions",
         {
-            "model": os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            "model": model,
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
             "response_format": {"type": "json_object"},
             "temperature": 0.2,
@@ -77,26 +109,79 @@ def _groq(system, prompt):
     return data["choices"][0]["message"]["content"]
 
 
-PROVIDERS = (("Gemini", _gemini), ("Groq", _groq))
+PROVIDERS = (("Gemini", "GEMINI_API_KEY", _gemini), ("Groq", "GROQ_API_KEY", _groq))
+SERVER_ERRORS = {500, 502, 503, 504}
+RETRY_PAUSE_SECONDS = 2.0
+DEFAULT_WAIT_SECONDS = 20
+MAX_WAIT_SECONDS = 60
+
+
+class AIRateLimited(Exception):
+    """Every model is over its request limit for now; try again after `retry_after` seconds."""
+
+    def __init__(self, retry_after, detail):
+        super().__init__(detail)
+        self.retry_after = retry_after
+
+
+def _retry_after(error, body):
+    """Seconds to wait, from the Retry-After header or Gemini's RetryInfo."""
+    try:
+        header = error.headers.get("Retry-After") if error.headers else None
+        if header:
+            return int(float(header))
+    except (TypeError, ValueError):
+        pass
+    try:
+        for detail in json.loads(body).get("error", {}).get("details", []):
+            delay = str(detail.get("retryDelay", ""))
+            if delay.endswith("s"):
+                return int(float(delay[:-1])) + 1
+    except (ValueError, AttributeError, TypeError):
+        pass
+    return DEFAULT_WAIT_SECONDS
 
 
 def ask(system, prompt):
-    """The parsed JSON reply and the name of the provider that gave it."""
-    failures, configured = [], False
-    for name, call in PROVIDERS:
-        try:
-            text = call(system, prompt)
-            if text is None:
-                continue
-            configured = True
-            return json.loads(text), name
-        except (urllib.error.URLError, TimeoutError, OSError, KeyError, IndexError, TypeError, ValueError) as error:
-            configured = True
-            detail = f"HTTP {error.code}" if isinstance(error, urllib.error.HTTPError) else type(error).__name__
-            failures.append(f"{name}: {detail}")
+    """The parsed JSON reply and the name of the provider that gave it.
+
+    Each key is tried with each model in order. A rate limit, a missing model or a slow reply
+    moves straight to the next model; a server error gets one retry. When
+    every model is only rate-limited, AIRateLimited says how long to wait.
+    """
+    failures, waits, configured = [], [], False
+    for name, env_name, call in PROVIDERS:
+        keys = _keys(env_name)
+        configured = configured or bool(keys)
+        for number, key in enumerate(keys, start=1):
+            label = f"{name} key {number}" if len(keys) > 1 else name
+            for model in _models(name):
+                outcome = None
+                for attempt in (1, 2):
+                    try:
+                        return json.loads(call(system, prompt, model, key)), name
+                    except urllib.error.HTTPError as error:
+                        body = error.read().decode(errors="replace") if error.fp else ""
+                        if error.code in SERVER_ERRORS and attempt == 1:
+                            time.sleep(RETRY_PAUSE_SECONDS)
+                            continue
+                        if error.code == 429:
+                            waits.append(_retry_after(error, body))
+                        outcome = f"HTTP {error.code}"
+                    except (urllib.error.URLError, TimeoutError, OSError) as error:
+                        outcome = "timed out" if "timed out" in str(error) else type(error).__name__
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        outcome = "unusable reply"
+                    break
+                failures.append(f"{label} {model}: {outcome}")
+                if outcome in ("HTTP 401", "HTTP 403"):
+                    break  # this key is refused: try the next key, not the next model
     if not configured:
         raise AIUnavailable
-    raise AIFailed("; ".join(failures))
+    detail = "; ".join(failures)
+    if waits:
+        raise AIRateLimited(min(max(waits), MAX_WAIT_SECONDS), detail)
+    raise AIFailed(detail)
 
 
 def _clean(value, limit=MAX_TEXT):

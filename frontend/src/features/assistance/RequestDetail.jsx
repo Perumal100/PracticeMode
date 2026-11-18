@@ -10,12 +10,15 @@ import {
 } from '@/components/ui/alert-dialog.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card.jsx';
-import { Label, Textarea } from '@/components/ui/input.jsx';
+import { Input, Label, Textarea } from '@/components/ui/input.jsx';
 import { Skeleton } from '@/components/ui/skeleton.jsx';
 import { formatDateTime } from '@/lib/format.js';
 import * as defaultApi from '../../api/assistance.js';
+import { getOwnProfile as defaultGetOwnProfile } from '../../api/instructors.js';
+import ReportProblem from '../instructors/ReportProblem.jsx';
 import { LearnerName, assistanceErrorMessage } from './RequestQueue.jsx';
 import { RequestStatus } from './RequestStatus.jsx';
+import SessionTimeline, { MeetingLink } from './SessionTimeline.jsx';
 
 const DETAILS_LIMIT = 1000;
 
@@ -28,11 +31,14 @@ function Row({ label, children }) {
   );
 }
 
-export default function RequestDetail({ requestId, onBack, onProgress, api = {} }) {
+export default function RequestDetail({ requestId, onBack, onProgress, user, api = {} }) {
   const getRequest = api.getRequest ?? defaultApi.getRequest;
   const scheduleRequest = api.scheduleRequest ?? defaultApi.scheduleRequest;
   const completeRequest = api.completeRequest ?? defaultApi.completeRequest;
   const cancelRequest = api.cancelRequest ?? defaultApi.cancelRequest;
+  const getOwnProfile = api.getOwnProfile ?? defaultGetOwnProfile;
+  const [link, setLink] = useState('');
+  const [editingMeeting, setEditingMeeting] = useState(false);
   const [state, setState] = useState({ status: 'loading', request: null, error: null });
   const [details, setDetails] = useState('');
   const [action, setAction] = useState({ busy: null, error: null, fieldError: null });
@@ -40,8 +46,15 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
 
   useEffect(() => {
     let cancelled = false;
+    // The default link is offered for every new session; it can be changed for this one.
+    getOwnProfile().then((profile) => !cancelled && setLink((current) => current || profile.meetingLink || ''), () => {});
     getRequest(requestId).then(
-      (request) => !cancelled && setState({ status: 'ready', request, error: null }),
+      (request) => {
+        if (cancelled) return;
+        setState({ status: 'ready', request, error: null });
+        if (request.meetingLink) setLink(request.meetingLink);
+        if (request.meetingDetails) setDetails(request.meetingDetails);
+      },
       (error) => !cancelled && setState({ status: 'error', request: null, error: assistanceErrorMessage(error) }),
     );
     return () => { cancelled = true; };
@@ -89,33 +102,66 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
 
   function accept(event) {
     event.preventDefault();
-    if (!details.trim()) {
-      setAction({ busy: null, error: null, fieldError: 'Add the meeting details the learner needs.' });
+    let valid = false;
+    try {
+      valid = ['http:', 'https:'].includes(new URL(link.trim()).protocol);
+    } catch { /* not a link */ }
+    if (!valid) {
+      setAction({ busy: null, error: null, fieldError: 'Enter the meeting link, starting with https://' });
       return;
     }
-    run('schedule', () => scheduleRequest(request.requestId, details.trim()));
+    run('schedule', async () => {
+      const updated = await scheduleRequest(request.requestId, { meetingLink: link.trim(), meetingDetails: details.trim() });
+      setEditingMeeting(false);
+      return updated;
+    });
   }
+
+  const meetingForm = (submitLabel) => (
+    <form onSubmit={accept} noValidate>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="meeting-link">Meeting link</Label>
+          <Input id="meeting-link" type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://"
+            aria-invalid={action.fieldError ? true : undefined} aria-describedby="meeting-link-note" />
+          <p id="meeting-link-note" className={action.fieldError ? 'text-[13px] font-medium text-destructive' : 'text-xs text-muted-foreground'}>
+            {action.fieldError || 'Your default link is filled in. Change it if this session uses a different one.'}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="meeting-details">Note for the learner (optional)</Label>
+          <Textarea id="meeting-details" rows={3} maxLength={DETAILS_LIMIT} value={details} onChange={(e) => setDetails(e.target.value)}
+            placeholder="For example, a different time, or what to have ready" />
+        </div>
+        {action.error && <Alert variant="destructive"><AlertCircle />{action.error}</Alert>}
+      </CardContent>
+      <CardFooter className="flex-wrap">
+        <Button type="submit" disabled={Boolean(action.busy)}>{action.busy === 'schedule' && <Loader2 className="animate-spin motion-reduce:animate-none" />}{submitLabel}</Button>
+        {editingMeeting && <Button variant="ghost" onClick={() => setEditingMeeting(false)}>Cancel</Button>}
+      </CardFooter>
+    </form>
+  );
 
   let session;
   if (request.status === 'REQUESTED') {
     session = (
-      <form onSubmit={accept} noValidate>
+      <>
         <CardHeader>
           <CardTitle>Accept this request</CardTitle>
-          <CardDescription>The learner sees your name and these details on their practice form.</CardDescription>
+          <CardDescription>The learner sees your name, the meeting link and your note on their practice form.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-1.5">
-          <Label htmlFor="meeting-details">Meeting details</Label>
-          <Textarea id="meeting-details" rows={4} maxLength={DETAILS_LIMIT} value={details} onChange={(e) => setDetails(e.target.value)}
-            placeholder="Where or how you will meet, and the time if it differs from the request"
-            aria-invalid={action.fieldError ? true : undefined} aria-describedby={action.fieldError ? 'meeting-details-error' : undefined} />
-          {action.fieldError && <p id="meeting-details-error" className="text-[13px] font-medium text-destructive">{action.fieldError}</p>}
-          {action.error && <Alert variant="destructive" className="mt-3"><AlertCircle />{action.error}</Alert>}
-        </CardContent>
-        <CardFooter>
-          <Button type="submit" disabled={Boolean(action.busy)}>{action.busy === 'schedule' && <Loader2 className="animate-spin motion-reduce:animate-none" />}Accept and schedule</Button>
-        </CardFooter>
-      </form>
+        {meetingForm('Accept and schedule')}
+      </>
+    );
+  } else if (request.status === 'SCHEDULED' && editingMeeting) {
+    session = (
+      <>
+        <CardHeader>
+          <CardTitle>Change the meeting</CardTitle>
+          <CardDescription>The learner sees the new link straight away, and the change is kept in the history.</CardDescription>
+        </CardHeader>
+        {meetingForm('Save meeting')}
+      </>
     );
   } else {
     const scheduled = request.status === 'SCHEDULED';
@@ -129,9 +175,15 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <p className="text-[13px] text-muted-foreground">Meeting details</p>
-            <p className="whitespace-pre-wrap break-words text-sm">{request.meetingDetails || 'None were recorded.'}</p>
+            <p className="text-[13px] text-muted-foreground">Meeting link</p>
+            {request.meetingLink ? <MeetingLink href={request.meetingLink} className="text-sm" /> : <p className="text-sm">None was recorded.</p>}
           </div>
+          {request.meetingDetails && (
+            <div>
+              <p className="text-[13px] text-muted-foreground">Note for the learner</p>
+              <p className="whitespace-pre-wrap break-words text-sm">{request.meetingDetails}</p>
+            </div>
+          )}
           {action.error && <Alert variant="destructive"><AlertCircle />{action.error}</Alert>}
         </CardContent>
         {scheduled && (
@@ -139,6 +191,7 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
             <Button onClick={() => run('complete', () => completeRequest(request.requestId))} disabled={Boolean(action.busy)}>
               {action.busy === 'complete' && <Loader2 className="animate-spin motion-reduce:animate-none" />}Mark as completed
             </Button>
+            <Button variant="outline" onClick={() => setEditingMeeting(true)} disabled={Boolean(action.busy)}>Change meeting</Button>
             <Button variant="ghost" className="text-destructive" onClick={() => setConfirmCancel(true)} disabled={Boolean(action.busy)}>Cancel session</Button>
           </CardFooter>
         )}
@@ -170,7 +223,14 @@ export default function RequestDetail({ requestId, onBack, onProgress, api = {} 
             <Row label="Asked on"><span className="tabular-nums">{formatDateTime(request.createdAt)}</span></Row>
           </dl>
         </Card>
-        <Card className="h-fit">{session}</Card>
+        <div className="space-y-6">
+          <Card className="h-fit">{session}</Card>
+          <Card className="h-fit">
+            <CardHeader><CardTitle>History</CardTitle></CardHeader>
+            <CardContent><SessionTimeline events={request.events} viewerName={user?.displayName} /></CardContent>
+          </Card>
+          <ReportProblem formId={request.formId} formTitle={request.formTitle} getForm={api.getPublishedForm} createChangeRequest={api.createChangeRequest} />
+        </div>
       </div>
       <AlertDialog open={confirmCancel} onOpenChange={setConfirmCancel}>
         <AlertDialogContent>

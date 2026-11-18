@@ -139,6 +139,18 @@ class AIDraftInput(Strict):
     languages = serializers.ListField(
         child=serializers.ChoiceField(choices=[code for code in LANGUAGES if code != ORIGINAL]), required=False, allow_empty=False,
     )
+    # A batch of questions, so the reviewer's screen can show progress step by step.
+    fieldIds = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=False, max_length=50)
+
+
+def hint_text(field):
+    return next((h.text for h in field.hints.all() if h.language_code == ORIGINAL), "")
+
+
+def needs_translation(field, code):
+    """No translation yet, or one whose hint was never translated though the question now has a hint."""
+    existing = next((t for t in field.translations.all() if t.language_code == code), None)
+    return existing is None or (not existing.guidance_text and bool(hint_text(field)))
 
 
 class FieldIdsInput(Strict):
@@ -149,6 +161,23 @@ class AIError(APIException):
     def __init__(self, status_code, code, message):
         self.status_code = status_code
         super().__init__({"error": code, "message": message})
+
+
+class AIRateLimitedError(APIException):
+    """The page waits `retryAfter` seconds and tries the same step again."""
+
+    status_code = 429
+
+    def __init__(self, retry_after):
+        super().__init__()
+        # Set after __init__, which would turn the number into text.
+        self.detail = {
+            "error": "AI_RATE_LIMITED",
+            "message": "The AI services are over their free request limit for the moment.",
+            "retryAfter": retry_after,
+        }
+        self.retry_after = retry_after
+        self.wait = retry_after  # DRF sends it as the Retry-After header
 
 
 def _check_editable(form_id):
@@ -166,6 +195,8 @@ def _ask(call, *args):
         return call(*args)
     except ai.AIUnavailable:
         raise AIError(503, "AI_NOT_CONFIGURED", "AI drafting is not set up: add GEMINI_API_KEY or GROQ_API_KEY to the server's .env.") from None
+    except ai.AIRateLimited as error:
+        raise AIRateLimitedError(error.retry_after) from None
     except ai.AIFailed as error:
         raise AIError(502, "AI_FAILED", f"The AI services could not draft this ({error}). Try again, or write the guidance yourself.") from None
 
@@ -180,10 +211,15 @@ class AIDraftView(APIView):
         data.is_valid(raise_exception=True)
         form = _check_editable(form_id)
         fields = list(form.fields.prefetch_related("hints", "translations"))
-        providers, created = set(), 0
+        if wanted := data.validated_data.get("fieldIds"):
+            wanted = set(wanted)
+            fields = [f for f in fields if f.pk in wanted]
+            if len(fields) != len(wanted):
+                return Response({"fieldIds": ["Some questions are not part of this form."]}, status=400)
+        providers, created, updated = set(), 0, 0
         # The model is called outside any transaction, so no row stays locked while it answers.
         if data.validated_data["task"] == "hints":
-            missing = [f for f in fields if not any(h.language_code == ORIGINAL for h in f.hints.all())]
+            missing = [f for f in fields if not hint_text(f)]
             drafts = {}
             if missing:
                 drafts, provider = _ask(ai.draft_hints, missing)
@@ -200,23 +236,33 @@ class AIDraftView(APIView):
             languages = data.validated_data.get("languages") or [code for code in LANGUAGES if code != ORIGINAL]
             planned = skipped = 0
             for code in languages:
-                missing = [f for f in fields if not any(t.language_code == code for t in f.translations.all())]
+                missing = [f for f in fields if needs_translation(f, code)]
                 if not missing:
                     continue
                 planned += len(missing)
-                items = [(f, next((h.text for h in f.hints.all() if h.language_code == ORIGINAL), "")) for f in missing]
-                drafts, provider = _ask(ai.draft_translations, items, code)
+                drafts, provider = _ask(ai.draft_translations, [(f, hint_text(f)) for f in missing], code)
                 providers.add(provider)
                 with transaction.atomic():
                     _editable_form(form_id)
-                    taken = set(Translation.objects.filter(field__in=missing, language_code=code).values_list("field_id", flat=True))
-                    rows = [Translation(field_id=pk, language_code=code, translated_label=label, guidance_text=guidance,
-                                        ai_generated=True, approved=False)
-                            for pk, (label, guidance) in drafts.items() if pk not in taken]
+                    existing = {t.field_id: t for t in Translation.objects.select_for_update().filter(field__in=missing, language_code=code)}
+                    rows = []
+                    for pk, (label, guidance) in drafts.items():
+                        current = existing.get(pk)
+                        if current is None:
+                            rows.append(Translation(field_id=pk, language_code=code, translated_label=label, guidance_text=guidance,
+                                                    ai_generated=True, approved=False))
+                        elif not current.guidance_text and guidance:
+                            # Only the hint is added; the reviewer's label stays. The row is
+                            # a draft again until the reviewer checks the new text.
+                            current.guidance_text, current.ai_generated, current.approved = guidance, True, False
+                            if not current.translated_label:
+                                current.translated_label = label
+                            current.save(update_fields=["guidance_text", "translated_label", "ai_generated", "approved"])
+                            updated += 1
                     Translation.objects.bulk_create(rows)
                     created += len(rows)
-            skipped = planned - created
-        return Response({"created": created, "skipped": skipped, "providers": sorted(providers)})
+            skipped = planned - created - updated
+        return Response({"created": created, "updated": updated, "skipped": skipped, "providers": sorted(providers)})
 
 
 def pending_drafts(form):

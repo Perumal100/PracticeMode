@@ -4,13 +4,17 @@ from django.db.models import Q
 from attempts.models import Attempt
 
 from .errors import AssistanceError
-from .models import AssistanceRequest
+from .models import AssistanceEvent, AssistanceRequest
 
 Status = AssistanceRequest.Status
 
 
 def _requests():
-    return AssistanceRequest.objects.select_related("attempt__practice_form", "learner", "instructor")
+    return AssistanceRequest.objects.select_related("attempt__practice_form", "learner", "instructor").prefetch_related("events__actor")
+
+
+def _log(request, action, actor=None, detail=""):
+    AssistanceEvent.objects.create(request=request, action=action, actor=actor, detail=detail[:500])
 
 
 def _locked(request_id):
@@ -36,6 +40,7 @@ def create_request(learner, attempt_id, requested_slot, note):
             if attempt.assistance_requests.filter(status__in=AssistanceRequest.OPEN).exists():
                 raise AssistanceError("REQUEST_ALREADY_OPEN", "This attempt already has an open assistance request.", 409)
             created = AssistanceRequest.objects.create(attempt=attempt, learner=learner, requested_slot=requested_slot, note=note)
+            _log(created, AssistanceEvent.Action.REQUESTED, learner)
         return _requests().get(pk=created.pk)
     except IntegrityError:
         raise AssistanceError("REQUEST_ALREADY_OPEN", "This attempt already has an open assistance request.", 409) from None
@@ -84,11 +89,12 @@ def cancel_request(user, role, request_id):
             raise AssistanceError("REQUEST_CLOSED", "This request is already closed.", 409)
         request.status = Status.CANCELLED
         request.save(update_fields=["status", "updated_at"])
-    return request
+        _log(request, AssistanceEvent.Action.CANCELLED, user, "by the instructor" if role == "INSTRUCTOR" else "by the learner")
+    return _requests().get(pk=request.pk)
 
 
-def schedule_request(instructor, request_id, meeting_details):
-    """API-17: accept a waiting request, or update the details of one's own session."""
+def schedule_request(instructor, request_id, meeting_link, meeting_details=""):
+    """API-17: accept a waiting request, or change the meeting of one's own session."""
     with transaction.atomic():
         request = _locked(request_id)
         if request.status == Status.SCHEDULED and request.instructor_id != instructor.pk:
@@ -97,11 +103,18 @@ def schedule_request(instructor, request_id, meeting_details):
             if request.instructor_id != instructor.pk:
                 raise _forbidden()
             raise AssistanceError("REQUEST_CLOSED", "This request is already closed.", 409)
+        accepting = request.status == Status.REQUESTED
+        changed = (request.meeting_link, request.meeting_details) != (meeting_link, meeting_details)
         request.instructor = instructor
+        request.meeting_link = meeting_link
         request.meeting_details = meeting_details
         request.status = Status.SCHEDULED
-        request.save(update_fields=["instructor", "meeting_details", "status", "updated_at"])
-    return request
+        request.save(update_fields=["instructor", "meeting_link", "meeting_details", "status", "updated_at"])
+        if accepting:
+            _log(request, AssistanceEvent.Action.SCHEDULED, instructor, meeting_link)
+        elif changed:
+            _log(request, AssistanceEvent.Action.UPDATED, instructor, meeting_link)
+    return _requests().get(pk=request.pk)
 
 
 def complete_request(instructor, request_id):
@@ -115,4 +128,13 @@ def complete_request(instructor, request_id):
             raise AssistanceError("REQUEST_CLOSED", "This request is already closed.", 409)
         request.status = Status.COMPLETED
         request.save(update_fields=["status", "updated_at"])
-    return request
+        _log(request, AssistanceEvent.Action.COMPLETED, instructor)
+    return _requests().get(pk=request.pk)
+
+
+def release_instructor_sessions(instructor, by):
+    """A removed instructor's booked sessions go back to the queue for another instructor."""
+    for request in AssistanceRequest.objects.select_for_update().filter(instructor=instructor, status=Status.SCHEDULED):
+        request.status, request.instructor, request.meeting_link, request.meeting_details = Status.REQUESTED, None, "", ""
+        request.save(update_fields=["status", "instructor", "meeting_link", "meeting_details", "updated_at"])
+        _log(request, AssistanceEvent.Action.RELEASED, by, "The instructor is no longer available.")

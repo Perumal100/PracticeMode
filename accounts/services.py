@@ -4,6 +4,13 @@ from rest_framework.exceptions import APIException, AuthenticationFailed, Permis
 from . import identity
 
 
+INSTRUCTOR_BLOCKED = {
+    "PENDING": {"error": "INSTRUCTOR_PENDING", "message": "Your instructor account is waiting for a Form Reviewer to approve it."},
+    "DECLINED": {"error": "INSTRUCTOR_DECLINED", "message": "Your instructor account request was not approved."},
+    "REMOVED": {"error": "INSTRUCTOR_REMOVED", "message": "Your instructor account has been removed. Contact a Form Reviewer."},
+}
+
+
 class UsernameTaken(APIException):
     status_code = 409
     default_detail = {"error": "USERNAME_TAKEN", "message": "That username is taken. Choose another one."}
@@ -28,6 +35,9 @@ def sign_in(request, credentials):
     user = authenticate(request, **identity.staff_credentials(credentials["username"], credentials["password"]))
     if user is None:
         raise AuthenticationFailed({"error": "INVALID_CREDENTIALS", "message": "Invalid username or password."})
+    instructor_status = getattr(getattr(user, "instructor_profile", None), "status", "ACTIVE")
+    if instructor_status != "ACTIVE":
+        raise PermissionDenied(INSTRUCTOR_BLOCKED[instructor_status])
     details = current_user(user)
     # A requested role is a check, never an elevation.
     if credentials.get("role") and details["role"] != credentials["role"]:

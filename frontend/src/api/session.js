@@ -8,14 +8,20 @@ export async function getSession() {
   return data?.user ?? null;
 }
 
+// Only sets the CSRF cookie. An old session whose role was taken away answers
+// 403 here; that must not stop the person from signing in again.
+function prepareCsrf() {
+  return getSession().catch(() => null);
+}
+
 export async function signIn(username, password) {
-  await getSession(); // login is CSRF-protected even before a session exists
+  await prepareCsrf(); // login is CSRF-protected even before a session exists
   const data = await apiRequest('/api/login', { method: 'POST', body: { username, password } });
   return data.user;
 }
 
 export async function register({ username, displayName, password }) {
-  await getSession();
+  await prepareCsrf();
   const data = await apiRequest('/api/register', { method: 'POST', body: { username, displayName, password } });
   return data.user;
 }

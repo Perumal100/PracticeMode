@@ -1,10 +1,11 @@
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.identity import INSTRUCTOR, LEARNER, role_for
 from accounts.permissions import HasRole
+from instructors.services import profile_for
 
 from . import services
 from .serializers import (
@@ -66,7 +67,10 @@ class AssistanceRequestScheduleView(AssistanceView):
         """API-17."""
         data = ScheduleSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        scheduled = services.schedule_request(request.user, request_id, data.validated_data["meetingDetails"].strip())
+        link = data.validated_data.get("meetingLink") or profile_for(request.user).meeting_link
+        if not link:
+            raise ValidationError({"meetingLink": ["Add the meeting link the learner should use."]})
+        scheduled = services.schedule_request(request.user, request_id, link, data.validated_data["meetingDetails"].strip())
         return Response(AssistanceRequestSerializer(scheduled).data)
 
 

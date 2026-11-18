@@ -62,10 +62,12 @@ describe('RequestDetail', () => {
       scheduleRequest: vi.fn().mockResolvedValue({ ...request(), status: 'SCHEDULED', instructorName: 'Ines Ortega', meetingDetails: 'Room 204.' }),
       completeRequest: vi.fn().mockResolvedValue({ ...mine, status: 'COMPLETED' }),
       cancelRequest: vi.fn().mockResolvedValue({ ...mine, status: 'CANCELLED' }),
+      getOwnProfile: vi.fn().mockResolvedValue({ meetingLink: '' }),
+      getPublishedForm: vi.fn(),
       ...overrides,
     };
     const onBack = vi.fn();
-    render(<RequestDetail requestId="r1" onBack={onBack} api={api} />);
+    render(<RequestDetail requestId="r1" onBack={onBack} user={{ displayName: 'Ines Ortega' }} api={api} />);
     return { api, onBack };
   }
 
@@ -78,16 +80,40 @@ describe('RequestDetail', () => {
     expect(screen.getByText('Requested')).toBeVisible();
   });
 
-  it('accepting needs meeting details, then books the session', async () => {
-    const { api } = setup();
-    fireEvent.click(await screen.findByRole('button', { name: 'Accept and schedule' }));
-    expect(screen.getByText('Add the meeting details the learner needs.')).toBeVisible();
-    expect(api.scheduleRequest).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText('Meeting details'), { target: { value: ' Room 204. ' } });
+  it('accepting offers the default meeting link, which can be changed, then books the session', async () => {
+    const { api } = setup({ getOwnProfile: vi.fn().mockResolvedValue({ meetingLink: 'https://meet.example.test/ines' }) });
+    const link = await screen.findByLabelText('Meeting link');
+    await waitFor(() => expect(link).toHaveValue('https://meet.example.test/ines'));
+    fireEvent.change(link, { target: { value: 'not a link' } });
     fireEvent.click(screen.getByRole('button', { name: 'Accept and schedule' }));
-    await waitFor(() => expect(api.scheduleRequest).toHaveBeenCalledWith('r1', 'Room 204.'));
+    expect(screen.getByText('Enter the meeting link, starting with https://')).toBeVisible();
+    expect(api.scheduleRequest).not.toHaveBeenCalled();
+    fireEvent.change(link, { target: { value: ' https://meet.example.test/room-5 ' } });
+    fireEvent.change(screen.getByLabelText('Note for the learner (optional)'), { target: { value: ' Bring your questions. ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Accept and schedule' }));
+    await waitFor(() => expect(api.scheduleRequest).toHaveBeenCalledWith('r1', { meetingLink: 'https://meet.example.test/room-5', meetingDetails: 'Bring your questions.' }));
     expect(await screen.findByText('Scheduled')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Mark as completed' })).toBeVisible();
+  });
+
+  it('a booked session can have its meeting changed', async () => {
+    const { api } = setup({ getRequest: vi.fn().mockResolvedValue({ ...mine, meetingLink: 'https://meet.example.test/old' }) });
+    fireEvent.click(await screen.findByRole('button', { name: 'Change meeting' }));
+    const link = screen.getByLabelText('Meeting link');
+    expect(link).toHaveValue('https://meet.example.test/old');
+    fireEvent.change(link, { target: { value: 'https://meet.example.test/new' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save meeting' }));
+    await waitFor(() => expect(api.scheduleRequest).toHaveBeenCalledWith('r2', expect.objectContaining({ meetingLink: 'https://meet.example.test/new' })));
+  });
+
+  it('shows the request history', async () => {
+    setup({ getRequest: vi.fn().mockResolvedValue({ ...mine, events: [
+      { action: 'REQUESTED', label: 'Requested', by: 'Alex', detail: '', at: '2026-11-16T10:00:00Z' },
+      { action: 'SCHEDULED', label: 'Accepted and scheduled', by: 'Ines Ortega', detail: 'https://meet.example.test/ines', at: '2026-11-16T11:00:00Z' },
+    ] }) });
+    expect(await screen.findByText('Accepted and scheduled')).toBeVisible();
+    expect(screen.getByText('by you')).toBeVisible();
+    expect(screen.getByText('by Alex')).toBeVisible();
   });
 
   it('US-05 AC-03: a request another instructor accepted is refused without its details', async () => {
@@ -98,7 +124,7 @@ describe('RequestDetail', () => {
 
   it('losing the race to accept hides the request', async () => {
     setup({ scheduleRequest: vi.fn().mockRejectedValue(new ApiError(409, 'REQUEST_ALREADY_SCHEDULED', 'x')) });
-    fireEvent.change(await screen.findByLabelText('Meeting details'), { target: { value: 'Room 204.' } });
+    fireEvent.change(await screen.findByLabelText('Meeting link'), { target: { value: 'https://meet.example.test/ines' } });
     fireEvent.click(screen.getByRole('button', { name: 'Accept and schedule' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Another instructor has already accepted this request.');
     expect(screen.queryByText('I am stuck on the address question.')).not.toBeInTheDocument();

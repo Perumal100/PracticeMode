@@ -39,9 +39,25 @@ class InstructorListFilterSerializer(RequestBodySerializer):
 
 
 class ScheduleSerializer(RequestBodySerializer):
-    meetingDetails = serializers.CharField(max_length=1000, error_messages={
-        "required": "Add the meeting details the learner needs.", "blank": "Add the meeting details the learner needs.",
-    })
+    # Omitted: the instructor's default meeting link is used.
+    meetingLink = serializers.URLField(max_length=500, required=False, error_messages={"invalid": "Enter a full link, starting with https://"})
+    meetingDetails = serializers.CharField(max_length=1000, required=False, allow_blank=True, default="")
+
+    def validate_meetingLink(self, value):
+        if value.split(":", 1)[0].lower() not in ("http", "https"):
+            raise serializers.ValidationError("Enter a full link, starting with https://")
+        return value
+
+
+class EventSerializer(serializers.Serializer):
+    action = serializers.CharField()
+    label = serializers.CharField(source="get_action_display")
+    detail = serializers.CharField()
+    at = serializers.DateTimeField()
+    by = serializers.SerializerMethodField()
+
+    def get_by(self, event):
+        return display_name(event.actor) if event.actor_id else None
 
 
 def learner_code(user):
@@ -55,7 +71,9 @@ class AssistanceRequestSerializer(serializers.ModelSerializer):
     formId = serializers.UUIDField(source="attempt.practice_form_id")
     formTitle = serializers.CharField(source="attempt.practice_form.title")
     requestedSlot = serializers.DateTimeField(source="requested_slot")
+    meetingLink = serializers.CharField(source="meeting_link")
     meetingDetails = serializers.CharField(source="meeting_details")
+    events = EventSerializer(many=True, read_only=True)
     instructorName = serializers.SerializerMethodField()
     learnerName = serializers.SerializerMethodField()
     learnerCode = serializers.SerializerMethodField()
@@ -64,7 +82,7 @@ class AssistanceRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssistanceRequest
         fields = ("requestId", "status", "attemptId", "formId", "formTitle", "requestedSlot", "note",
-                  "meetingDetails", "instructorName", "learnerName", "learnerCode", "createdAt")
+                  "meetingLink", "meetingDetails", "instructorName", "learnerName", "learnerCode", "createdAt", "events")
 
     def get_instructorName(self, request):
         return display_name(request.instructor) if request.instructor_id else None

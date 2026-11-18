@@ -1,8 +1,8 @@
 // US-04 inspect extracted fields, US-10 compare with the source and correct
 // what extraction got wrong, US-17 approve or reject. Corrections are allowed
 // only while the form awaits review.
-import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ClipboardList, ExternalLink, Eye, Gavel, History, Languages, Loader2, Pencil, Plus, Search, Tag, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertCircle, AlertTriangle, ArrowDown, ArrowRight, ArrowUp, BarChart3, Check, ChevronDown, ClipboardList, ExternalLink, Eye, Gavel, History, Languages, Loader2, Pencil, Plus, Search, Sparkles, Tag, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/page-header.jsx';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert.jsx';
@@ -34,7 +34,7 @@ import {
   updateFormMetadata as defaultUpdateFormMetadata,
 } from '../../api/review.js';
 import FieldEditor, { FIELD_TYPES, apiErrorMessage } from './FieldEditor.jsx';
-import { AIDraftButtons, DraftsBanner, aiErrorMessage, countDrafts } from './AIDrafts.jsx';
+import { DraftProgress, DraftsBanner, TranslateDialog, aiErrorMessage, countDrafts, planSteps } from './AIDrafts.jsx';
 import ChecklistEditor from './ChecklistEditor.jsx';
 import FormPreview from './FormPreview.jsx';
 import GuidanceEditor, { GuidanceSummary } from './GuidanceEditor.jsx';
@@ -42,6 +42,8 @@ import { reviewErrorMessage } from './ReviewQueue.jsx';
 
 const TYPE_LABEL = Object.fromEntries(FIELD_TYPES);
 const INLINE_OPTIONS = 5;
+// About five minutes of waiting at the AI services' usual one-minute windows.
+const MAX_RATE_LIMIT_WAITS = 5;
 
 // Long choice lists (country codes, states…) collapse to a one-line summary;
 // the full list opens in a scrollable, filterable panel.
@@ -243,6 +245,9 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
   const approveDrafts = api.approveDrafts ?? defaultApproveDrafts;
   const discardDrafts = api.discardDrafts ?? defaultDiscardDrafts;
   const [aiBusy, setAiBusy] = useState(null);
+  const [drafting, setDrafting] = useState(false);
+  const [run, setRun] = useState(null);
+  const stopRef = useRef(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [form, setForm] = useState({ state: 'loading', data: null, error: null });
   const [editingDetails, setEditingDetails] = useState(false);
@@ -330,21 +335,64 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
     setForm({ state: 'ready', data, error: null });
   }
 
-  async function runDraft(task, languages) {
-    setAiBusy(task);
-    setError(null);
-    try {
-      const result = await draftGuidance(formId, task, languages);
-      await reload();
-      const what = task === 'hints' ? 'hint' : 'translation';
-      if (result.created) toast.success(`Drafted ${result.created} ${what}${result.created === 1 ? '' : 's'} with ${result.providers.join(' and ')}. Review them before approving.`);
-      else toast.info(task === 'hints' ? 'Every question already has a hint.' : 'Every question already has those translations.');
-      if (result.skipped) toast.warning(`The AI gave no usable draft for ${result.skipped} ${what}${result.skipped === 1 ? '' : 's'}; write ${result.skipped === 1 ? 'it' : 'them'} yourself.`);
-    } catch (err) {
-      setError(aiErrorMessage(err));
-    } finally {
-      setAiBusy(null);
+  // Waits out a rate limit, counting down, unless the reviewer stops.
+  async function waitOut(seconds) {
+    for (let left = seconds; left > 0; left -= 1) {
+      if (stopRef.current) return;
+      setRun((r) => r && { ...r, waiting: left });
+      await new Promise((resolve) => { setTimeout(resolve, 1000); });
     }
+    setRun((r) => r && { ...r, waiting: 0 });
+  }
+
+  // Each step is one request, so the bar moves as batches finish. A rate
+  // limit is waited out and the same step tried again.
+  async function runDraft(steps) {
+    setDrafting(false);
+    setError(null);
+    stopRef.current = false;
+    const totals = { created: 0, updated: 0, skipped: 0, providers: new Set() };
+    setRun({ steps, index: 0, created: 0, updated: 0, stopping: false, waiting: 0 });
+    let finished = 0;
+    try {
+      for (const step of steps) {
+        let result = null;
+        for (let attempt = 1; !result; attempt += 1) {
+          if (stopRef.current) break;
+          try {
+            result = await draftGuidance(formId, step.task, step.languages, step.fieldIds);
+          } catch (err) {
+            if (err?.code !== 'AI_RATE_LIMITED' || attempt > MAX_RATE_LIMIT_WAITS) throw err;
+            await waitOut(Number(err.body?.retryAfter) || 20);
+          }
+        }
+        if (!result) break;
+        totals.created += result.created;
+        totals.updated += result.updated ?? 0;
+        totals.skipped += result.skipped;
+        result.providers.forEach((p) => totals.providers.add(p));
+        finished += 1;
+        setRun((r) => r && { ...r, index: finished, created: totals.created, updated: totals.updated });
+      }
+    } catch (err) {
+      setError(err?.code === 'AI_RATE_LIMITED'
+        ? 'The AI services stayed over their free request limit. Wait a minute, then draft again: what is already drafted is kept.'
+        : `${aiErrorMessage(err)} Drafts made before this step are kept.`);
+    } finally {
+      setRun(null);
+      await reload().catch(() => {});
+    }
+    const made = totals.created + totals.updated;
+    const by = totals.providers.size ? ` with ${[...totals.providers].join(' and ')}` : '';
+    if (made) toast.success(`${made} AI draft${made === 1 ? '' : 's'} made${by}${finished < steps.length ? ` (stopped after ${finished} of ${steps.length} steps)` : ''}. Review them before approving.`);
+    else if (finished === steps.length) toast.info('Nothing new was drafted.');
+    if (totals.skipped) toast.warning(`The AI gave no usable draft for ${totals.skipped} item${totals.skipped === 1 ? '' : 's'}; write ${totals.skipped === 1 ? 'it' : 'them'} yourself.`);
+  }
+
+  function draftHints() {
+    const steps = planSteps(form.data.fields, { hints: true, languages: [] });
+    if (steps.length) runDraft(steps);
+    else toast.info('Every question already has a hint.');
   }
 
   async function settleDrafts(action) {
@@ -539,16 +587,26 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
           </Card>
 
           <Card>
-            <CardHeader className="flex-row items-start justify-between gap-3">
-              <div className="space-y-1">
+            <CardHeader className="flex-row flex-wrap items-start justify-between gap-x-6 gap-y-3">
+              <div className="min-w-0 flex-1 basis-64 space-y-1">
                 <CardTitle>Extracted fields</CardTitle>
                 <CardDescription>Labels, input types, required flags and validation exactly as learners will get them.{pending && ' Correct anything that differs from the source.'}</CardDescription>
               </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                {guidanceEditable && <AIDraftButtons languages={data.guidance_languages} busy={aiBusy === 'hints' || aiBusy === 'translations' ? aiBusy : null} onDraft={runDraft} />}
-                {pending && <Button variant="outline" size="sm" onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                {guidanceEditable && (
+                  <>
+                    <Button variant="outline" size="sm" disabled={Boolean(run) || Boolean(aiBusy)} onClick={draftHints} title="Write a hint with AI for each question without one">
+                      <Sparkles />Draft hints
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={Boolean(run) || Boolean(aiBusy)} onClick={() => setDrafting(true)} title="Translate labels and hints with AI">
+                      <Sparkles />Draft translations
+                    </Button>
+                  </>
+                )}
+                {pending && <Button variant="outline" size="sm" disabled={Boolean(run)} onClick={() => setFieldEditor({ open: true, field: null })}><Plus />Add field</Button>}
               </div>
             </CardHeader>
+            <DraftProgress run={run} onStop={() => { stopRef.current = true; setRun((r) => r && { ...r, stopping: true }); }} />
             <Table>
               <caption className="sr-only">Extracted fields</caption>
               <TableHeader>
@@ -677,6 +735,9 @@ export default function ReviewDetail({ formId, onBack, onInsights, onOpenForm, a
         </div>
       </div>
 
+      {drafting && (
+        <TranslateDialog fields={data.fields} languages={data.guidance_languages} open onOpenChange={setDrafting} onRun={runDraft} />
+      )}
       <GuidanceEditor
         field={guidanceFor}
         languages={data.guidance_languages}
