@@ -9,17 +9,18 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | | |
 | --- | --- |
 | **Sprint 3 goal** | A Form Reviewer can import a real web form with the browser extension, verify and correct it, and publish it. A learner can then find that form, practise it with autosave, and get feedback on their answers. |
-| **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history for learners, and form deletion for reviewers. Built on local branches; each story becomes Done once a teammate reviews and merges its pull request. |
-| **Status** | Sprint 3: 10 of 16 MVP stories Done. Sprint 4: the other 6 MVP stories and US-15 implemented and tested, awaiting review. |
-| **Live deployment** | [practicemode-amber.vercel.app](https://practicemode-amber.vercel.app/) |
-| **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · SQLite locally, PostgreSQL for deployment |
-| **Tests** | 291 backend · 183 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
+| **Sprint 4 work** | The six remaining MVP stories (US-03, US-05, US-09, US-12, US-18, US-22), stretch story US-15, learner accounts with a password and practice history, form version history, form deletion, instructor accounts with meeting links and change requests, and AI drafts of guidance that a Form Reviewer approves. |
+| **Status** | All 16 MVP stories and stretch story US-15 are merged into `main` through pull requests (see [Pull requests and reviews](#pull-requests-and-reviews)). |
+| **Live deployment** | **[practicemode-amber.vercel.app](https://practicemode-amber.vercel.app/)** (web app and API on Vercel, PostgreSQL on Neon; see [Deployment](#deployment)) |
+| **Stack** | Django 5.2 + Django REST Framework · React 18 + Vite + Tailwind CSS v4 (shadcn/ui components) · Chrome extension (Manifest V3) · Gemini and Groq for AI drafts · SQLite locally, PostgreSQL in production |
+| **Tests** | 292 backend · 185 frontend · 28 extension unit · 29 extension end-to-end (Playwright) |
 
 ## Contents
 
 - [User stories](#user-stories)
 - [Features](#features)
-- [Architecture](#architecture)
+- [Architecture](#architecture) (with diagrams)
+- [Deployment](#deployment)
 - [Getting started](#getting-started)
 - [Demo script](#demo-script)
 - [Testing](#testing)
@@ -48,27 +49,31 @@ CS-GY 6063 Software Engineering I · Section I2 · Group I2-4 · Fall 2026
 | **US-25** Import with the extension | Capture a multi-step form with the browser extension and send it for review in one click. | AC-01 creates a pending form with fields and source · AC-02 unsupported fields and rules are reported, never published silently · AC-03 non-reviewers refused | `4841c79` `2aa2e0b` `3970e71` `fa00694` `ae9edf8` | `reviewer/tests/test_extension_import.py`, `Form_Scrapper_Extension/tests/` |
 | **US-26** Submit and get feedback | Submit an attempt and see which answers break the form's rules, next to those fields. | AC-01 outcome recorded · AC-02 per-field feedback · AC-03 a completed attempt is locked; a repeat returns the stored result | `38fc4b4` `01dc41c` | `attempts/tests/test_validation.py`, `test_attempt_api.py`, `PracticeForm.test.jsx` |
 
-### Implemented in Sprint 4 (awaiting review)
+### Implemented in Sprint 4
 
-Each row is one local branch, stacked in this order. A story moves to **Done** once its pull request is reviewed by a teammate and merged.
+Each story reached `main` through its own pull request. Reviewers are listed under [Pull requests and reviews](#pull-requests-and-reviews).
 
-| Story | What a user can do | Acceptance criteria covered | Branch | Tests |
+| Story | What a user can do | Acceptance criteria covered | Pull request | Tests |
 | --- | --- | --- | --- | --- |
-| **US-12** Field hints | Open a hint under a question without leaving the form. | AC-01 hint shown with the label still visible · AC-02 opening or closing a hint leaves the answer unchanged · AC-03 a field without a hint shows no hint control and no invented text | `feature/us-12-field-hints` | `guidance/tests/test_hints.py`, `Hints.test.jsx` |
-| **US-09** Translated guidance | Choose a guidance language; the translated label and guidance appear beside the original. | AC-01 translation beside the original · AC-02 changing language keeps labels and answers · AC-03 a missing translation is named and the original guidance is shown | `feature/us-09-translated-guidance` | `guidance/tests/test_translations.py`, `Translations.test.jsx` |
-| **US-18** Preparation checklist | See what to have ready before starting, with every example marked as fictional. | AC-01 checklist shown · AC-02 examples labelled "Fictional example" · AC-03 a form without a checklist says so | `feature/us-18-preparation-checklist` | `guidance/tests/test_checklist.py`, `Checklist.test.jsx` |
-| **US-03** Request instructor help | Ask for a live session from the practice form and follow its status. | AC-01 request stored with the attempt and form · AC-02 confirmation and current status · AC-03 a missing time or note is named and nothing is created | `feature/us-03-assistance-request` | `assistance/tests/test_learner_requests.py`, `AssistancePanel.test.jsx` |
-| **US-05** Instructor requests | See waiting requests, accept one with meeting details, mark it completed or cancel it. | AC-01 queue with form and meeting details · AC-02 request details · AC-03 another instructor's accepted request returns `403` with no request data | `feature/us-05-instructor-requests` | `assistance/tests/test_instructor_requests.py`, `Instructor.test.jsx` |
-| **US-22** Progress filters | Filter the attempts of learners whose request you accepted by unfinished attempts, repeated errors or frequent hint use. | AC-01 filters · AC-02 error and hint-view counts per attempt · AC-03 learners outside the instructor's scope are never listed; asking for one returns `403` | `feature/us-22-progress-filters` | `assistance/tests/test_progress.py`, `LearnerProgress.test.jsx` |
-| **US-15** (stretch) Request a form | Send the link to a form that is not in the catalog and follow it from received to ready to practise. | AC-01 current status shown · AC-02 an unapproved form is never shown as available · AC-03 a declined or rejected request explains why | `feature/us-15-form-requests` | `form_requests/tests/test_form_requests.py`, `Requests.test.jsx` |
+| **US-12** Field hints | Open a hint under a question without leaving the form. | AC-01 hint shown with the label still visible · AC-02 opening or closing a hint leaves the answer unchanged · AC-03 a field without a hint shows no hint control and no invented text | [#16](https://github.com/Perumal100/PracticeMode/pull/16) | `guidance/tests/test_hints.py`, `Hints.test.jsx` |
+| **US-09** Translated guidance | Choose a guidance language; the translated label and guidance appear beside the original. | AC-01 translation beside the original · AC-02 changing language keeps labels and answers · AC-03 a missing translation is named and the original guidance is shown | [#17](https://github.com/Perumal100/PracticeMode/pull/17) | `guidance/tests/test_translations.py`, `Translations.test.jsx` |
+| **US-18** Preparation checklist | See what to have ready before starting, with every example marked as fictional. | AC-01 checklist shown · AC-02 examples labelled "Fictional example" · AC-03 a form without a checklist says so | [#18](https://github.com/Perumal100/PracticeMode/pull/18) | `guidance/tests/test_checklist.py`, `Checklist.test.jsx` |
+| **US-03** Request instructor help | Ask for a live session from the practice form and follow its status. | AC-01 request stored with the attempt and form · AC-02 confirmation and current status · AC-03 a missing time or note is named and nothing is created | [#9](https://github.com/Perumal100/PracticeMode/pull/9) | `assistance/tests/test_learner_requests.py`, `AssistancePanel.test.jsx` |
+| **US-05** Instructor requests | See waiting requests, accept one with meeting details, mark it completed or cancel it. | AC-01 queue with form and meeting details · AC-02 request details · AC-03 another instructor's accepted request returns `403` with no request data | [#13](https://github.com/Perumal100/PracticeMode/pull/13) | `assistance/tests/test_instructor_requests.py`, `Instructor.test.jsx` |
+| **US-22** Progress filters | Filter the attempts of learners whose request you accepted by unfinished attempts, repeated errors or frequent hint use. | AC-01 filters · AC-02 error and hint-view counts per attempt · AC-03 learners outside the instructor's scope are never listed; asking for one returns `403` | [#23](https://github.com/Perumal100/PracticeMode/pull/23), [#22](https://github.com/Perumal100/PracticeMode/pull/22) | `assistance/tests/test_progress.py`, `LearnerProgress.test.jsx` |
+| **US-15** (stretch) Request a form | Send the link to a form that is not in the catalog and follow it from received to ready to practise. | AC-01 current status shown · AC-02 an unapproved form is never shown as available · AC-03 a declined or rejected request explains why | [#15](https://github.com/Perumal100/PracticeMode/pull/15) | `form_requests/tests/test_form_requests.py`, `Requests.test.jsx` |
 
 Also built in Sprint 4, as changes the team asked for during the sprint:
 
-| Change | What it does | Branch | Tests |
+| Change | What it does | Pull request | Tests |
 | --- | --- | --- | --- |
-| Learner accounts (changes US-01) | Learners create an account with a username, a display name and a password (no email), and sign in from any device. Their attempts are kept on the account, listed on **My practice**, and resumed from there. | `feature/learner-accounts` | `accounts/tests/test_authentication.py`, `attempts/tests/test_history.py`, `SignIn.test.jsx`, `PracticeHistory.test.jsx` |
-| Form versions for learners | Each published version is numbered. Learners see the version they are on and a version history listing the questions added, removed and changed. A learner can still open a version they practised after it was replaced. | `feature/form-versions-and-deletion` | `reviewer/tests/test_versions_and_removal.py`, `Versions.test.jsx` |
-| Deleting forms | A reviewer deletes a form and all its versions. A form learners have practised is withdrawn instead: it leaves the catalog and queue, takes no new answers, and its learners keep their results. | `feature/form-versions-and-deletion` | `reviewer/tests/test_versions_and_removal.py`, `ReviewEditing.test.jsx` |
+| Learner accounts (changes US-01) | Learners create an account with a username, a display name and a password (no email), and sign in from any device. Their attempts are kept on the account, listed on **My practice**, and resumed from there. | [#10](https://github.com/Perumal100/PracticeMode/pull/10) | `accounts/tests/test_authentication.py`, `attempts/tests/test_history.py`, `SignIn.test.jsx`, `PracticeHistory.test.jsx` |
+| Form versions for learners | Each published version is numbered. Learners see the version they are on and a version history listing the questions added, removed and changed. A learner can still open a version they practised after it was replaced. | [#24](https://github.com/Perumal100/PracticeMode/pull/24) | `reviewer/tests/test_versions_and_removal.py`, `Versions.test.jsx` |
+| Deleting forms | A reviewer deletes a form and all its versions. A form learners have practised is withdrawn instead: it leaves the catalog and queue, takes no new answers, and its learners keep their results. | [#24](https://github.com/Perumal100/PracticeMode/pull/24) | `reviewer/tests/test_versions_and_removal.py`, `ReviewEditing.test.jsx` |
+| Instructor accounts | Instructors request an account that a Form Reviewer approves; each has a default meeting link, and every help request keeps a history. Instructors report mistakes in published forms as change requests. | [#21](https://github.com/Perumal100/PracticeMode/pull/21) | `instructors/tests/test_instructors.py`, `Instructors.test.jsx` |
+| AI drafts of guidance | Draft hints and translations with Gemini (Groq as backup); drafts stay hidden from learners until a Form Reviewer approves them. | [#25](https://github.com/Perumal100/PracticeMode/pull/25), [#12](https://github.com/Perumal100/PracticeMode/pull/12) | `guidance/tests/test_ai_drafts.py`, `AIDrafts.test.jsx` |
+| Reviewer guidance editor | Write a hint and per-language translations for each question, and the preparation checklist, on the review page. | [#14](https://github.com/Perumal100/PracticeMode/pull/14) | `guidance/tests/test_review_editing.py`, `GuidanceEditing.test.jsx` |
+| Extension "Apply" entry | On job pages whose form appears only after **Apply**, the extension opens it before extracting. | [#11](https://github.com/Perumal100/PracticeMode/pull/11) | `Form_Scrapper_Extension/tests/` |
 
 ### Product backlog
 
@@ -144,12 +149,237 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 
 ## Architecture
 
+### System overview
+
+PracticeMode is one Django project that serves a JSON API under `/api`, with two clients: the React web app and the Chrome extension. In production both the web app and the API sit behind one Vercel domain, so every browser request is same-origin. Each request passes through Django's session and CSRF middleware, then DRF's authentication and role permission checks, before it reaches a domain app.
+
+```mermaid
+flowchart TB
+    %% ---------- Users ----------
+    subgraph USERS["👥 Users"]
+        direction LR
+        U1(["Learner"])
+        U2(["Form Reviewer"])
+        U3(["Instructor"])
+    end
+
+    %% ---------- Clients ----------
+    subgraph CLIENTS["Client tier"]
+        direction LR
+        subgraph SPA["React 18 web app · Vite · Tailwind v4 · shadcn/ui"]
+            direction TB
+            F1["Learner screens<br/>catalog · practice · history<br/>requests · assistance"]
+            F2["Reviewer screens<br/>review · guidance + AI drafts<br/>insights · instructors"]
+            F3["Instructor screens<br/>help queue · progress<br/>forms · change requests"]
+            HK["Hooks<br/>useAutosave · useResumeAttempt"]
+            AC["api/client.js<br/>fetch · session cookie · X-CSRFToken"]
+            F1 & F2 & F3 --> HK --> AC
+        end
+        subgraph EXT["Chrome extension · Manifest V3"]
+            direction TB
+            E1["Content scripts<br/>step_detector · field_extractor<br/>option_harvester · safety_policy"]
+            E2["Popup + copilot panel"]
+            E3["Service worker<br/>maps capture to import payload"]
+            E2 --> E1 --> E3
+        end
+    end
+
+    %% ---------- Edge ----------
+    subgraph EDGE["Vercel edge · practicemode-amber.vercel.app"]
+        direction LR
+        CDN["CDN<br/>frontend/dist"]
+        RW{"vercel.json<br/>rewrites"}
+    end
+
+    %% ---------- Backend ----------
+    subgraph BACKEND["Django 5.2 + DRF · Python function api/index.py"]
+        direction TB
+        MW["Middleware<br/>Security · Session · CSRF · Auth"]
+        PERM["DRF auth + permissions<br/>SessionAuthenticationWith401 · role groups<br/>401 signed out · 403 wrong role or owner"]
+        LAYER["views → serializers → services → models"]
+        MW --> PERM --> LAYER
+
+        subgraph APPS["Domain apps"]
+            direction LR
+            A1["accounts<br/>sign-in · register · roles"]
+            A2["catalog<br/>approved forms · search"]
+            A3["attempts<br/>autosave · validation<br/>feedback · analytics"]
+            A4["reviewer<br/>import · queue · decisions<br/>corrections · versions"]
+            A5["guidance<br/>hints · translations<br/>checklist · ai.py"]
+            A6["assistance<br/>help requests · events<br/>progress filters"]
+            A7["instructors<br/>profiles · approval<br/>change requests"]
+            A8["form_requests<br/>learner form requests"]
+        end
+        LAYER --> APPS
+    end
+
+    %% ---------- Data + external ----------
+    subgraph DATA["Data and external services"]
+        direction LR
+        DB[("PostgreSQL on Neon<br/>SQLite locally")]
+        GEM["Google Gemini<br/>tried first"]
+        GROQ["Groq<br/>backup"]
+    end
+
+    U1 & U2 & U3 --> SPA
+    U2 --> EXT
+    SPA -- "GET page + assets" --> CDN
+    AC -- "same-origin /api/* (no CORS)" --> RW
+    E3 -- "POST /api/forms/extractions<br/>structure only, never answers" --> RW
+    RW -- "/api/* · /admin/*" --> MW
+    APPS -- "Django ORM" --> DB
+    A5 -. "form questions only" .-> GEM
+    A5 -. "on rate limit or failure" .-> GROQ
+
+    classDef user fill:#fde68a,stroke:#b45309,color:#1f2937
+    classDef client fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+    classDef edge fill:#e5e7eb,stroke:#374151,color:#111827
+    classDef core fill:#dcfce7,stroke:#15803d,color:#14532d
+    classDef app fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    classDef store fill:#ede9fe,stroke:#6d28d9,color:#3b0764
+    classDef ext fill:#fce7f3,stroke:#be185d,color:#831843
+
+    class U1,U2,U3 user
+    class F1,F2,F3,HK,AC,E1,E2,E3 client
+    class CDN,RW edge
+    class MW,PERM,LAYER core
+    class A1,A2,A3,A4,A5,A6,A7,A8 app
+    class DB store
+    class GEM,GROQ ext
 ```
- Chrome extension ──(import, API-15)──┐
-                                      ▼
- React web app ──(/api via Vite proxy)──► Django + DRF ──► SQLite / PostgreSQL
-  learner · reviewer · instructor        accounts · catalog · attempts · reviewer
+
+| Layer | What it does |
+| --- | --- |
+| **Clients** | The web app calls the API only through `api/client.js`, which sends the session cookie and the `X-CSRFToken` header. The extension walks a form without submitting it and sends only its structure. |
+| **Edge** | Vercel serves the built web app from its CDN, and rewrites `/api/*` and `/admin/*` to the Django function. Any other path returns `index.html`. |
+| **Request pipeline** | Django middleware handles HTTPS, sessions and the CSRF check. DRF then returns `401` for a signed-out caller and `403` for the wrong role or owner, before any view runs. |
+| **Domain apps** | Eight Django apps, one per area of the product. Most keep their views thin and put their rules in `services.py`, inside database transactions. |
+| **Data and AI** | All state lives in PostgreSQL. Only `guidance/ai.py` calls an outside service, and it sends a form's questions, never anything a learner typed. |
+
+### Form lifecycle
+
+A form only reaches learners after a Form Reviewer approves it. Revising a published form creates a new version that replaces the old one when approved.
+
+```mermaid
+stateDiagram-v2
+    [*] --> AWAITING_REVIEW: extension import
+    AWAITING_REVIEW --> AWAITING_REVIEW: reviewer corrects fields, writes or approves guidance
+    AWAITING_REVIEW --> APPROVED: approve
+    AWAITING_REVIEW --> REJECTED: reject with a reason
+    APPROVED --> SUPERSEDED: a revision is approved
+    APPROVED --> WITHDRAWN: deleted after learners practised it
+    AWAITING_REVIEW --> [*]: deleted (no attempts)
+    APPROVED --> [*]: deleted (no attempts)
+    REJECTED --> [*]: deleted
+    note right of APPROVED
+        Only APPROVED forms appear in the catalog.
+        Learners keep reading SUPERSEDED or WITHDRAWN
+        versions they practised.
+    end note
 ```
+
+### Practising a form
+
+Each answer is saved on its own as the learner types. "Saved ✓" appears only after the server confirms. Completion checks only the answers already saved, then locks the attempt.
+
+```mermaid
+sequenceDiagram
+    actor Learner
+    participant Web as React app
+    participant API as Django API
+    participant DB as Database
+
+    Learner->>Web: open an approved form
+    Web->>API: POST /api/attempts {formId}
+    API->>DB: create Attempt + ProgressCounter
+    API-->>Web: 201 attempt
+    loop every change (debounced)
+        Learner->>Web: type an answer
+        Web->>API: PATCH /api/attempts/{id}/answers/{fieldId}
+        API->>DB: upsert Answer
+        API-->>Web: 200 savedAt
+        Web-->>Learner: "Saved ✓"
+    end
+    Learner->>Web: Submit
+    Web->>API: POST /api/attempts/{id}/completion
+    API->>DB: validate saved answers, store feedback, lock
+    API-->>Web: 200 validationFeedback per field
+    Web-->>Learner: problems shown next to their fields
+```
+
+### Help from an instructor
+
+```mermaid
+stateDiagram-v2
+    [*] --> REQUESTED: learner asks for a session (time + note)
+    REQUESTED --> SCHEDULED: an instructor accepts with a meeting link
+    SCHEDULED --> SCHEDULED: meeting changed
+    SCHEDULED --> COMPLETED: instructor marks it done
+    REQUESTED --> CANCELLED: learner cancels
+    SCHEDULED --> CANCELLED: learner or instructor cancels
+    SCHEDULED --> REQUESTED: instructor removed, returned to the queue
+    COMPLETED --> [*]
+    CANCELLED --> [*]
+```
+
+While a request is `SCHEDULED` or `COMPLETED`, its instructor can see that learner's progress (US-22). Every step is recorded as an `AssistanceEvent`.
+
+### Data model overview
+
+The main tables and how they relate. Users are Django's default user model, and each user has exactly one role group: `LEARNER`, `FORM_REVIEWER` or `INSTRUCTOR`.
+
+```mermaid
+erDiagram
+    USER ||--o{ ATTEMPT : practises
+    USER ||--o| INSTRUCTOR_PROFILE : "has (instructors)"
+    PRACTICE_FORM ||--|{ FORM_FIELD : has
+    PRACTICE_FORM ||--o| REVIEW_DECISION : "decided by"
+    PRACTICE_FORM ||--o{ PRACTICE_FORM : "revision of"
+    PRACTICE_FORM ||--o{ CHECKLIST_ITEM : has
+    PRACTICE_FORM ||--o{ ATTEMPT : "practised in"
+    FORM_FIELD ||--o{ HINT : "one per language"
+    FORM_FIELD ||--o{ TRANSLATION : "one per language"
+    ATTEMPT ||--|{ ANSWER : holds
+    ANSWER }o--|| FORM_FIELD : answers
+    ATTEMPT ||--|| PROGRESS_COUNTER : tracks
+    ATTEMPT ||--o{ ASSISTANCE_REQUEST : "help for"
+    ASSISTANCE_REQUEST ||--o{ ASSISTANCE_EVENT : history
+    USER ||--o{ FORM_REQUEST : "asks for a form"
+    FORM_REQUEST }o--o| PRACTICE_FORM : "linked to"
+    USER ||--o{ FORM_CHANGE_REQUEST : reports
+    FORM_CHANGE_REQUEST }o--|| PRACTICE_FORM : about
+
+    PRACTICE_FORM {
+        uuid id
+        string title
+        string source_url
+        json categories
+        enum status
+    }
+    FORM_FIELD {
+        uuid id
+        int position
+        string label
+        enum input_type
+        bool required
+        json validation
+    }
+    ATTEMPT {
+        uuid id
+        enum status
+        json validation_feedback
+    }
+    ASSISTANCE_REQUEST {
+        uuid id
+        datetime requested_slot
+        enum status
+        string meeting_link
+    }
+```
+
+Field-level details are under [Reference: Data model](#data-model).
+
+### Code layout
 
 | Path | What it holds | Stories |
 | --- | --- | --- |
@@ -160,12 +390,81 @@ Full list with priorities: [docs/product-backlog.md](docs/product-backlog.md).
 | `guidance/` | Hints, translations and preparation checklists, `seed_guidance` | US-09, US-12, US-18 |
 | `assistance/` | Assistance requests and instructor progress, `seed_demo_assistance` | US-03, US-05, US-22 |
 | `form_requests/` | Learner requests for new forms | US-15 |
+| `instructors/` | Instructor accounts and approval, default meeting links, form change requests | US-05 (supporting) |
+| `api/index.py`, `vercel.json` | Vercel entry point and routing for the live deployment | |
 | `practicemode/` | Django settings, URL routing, `.env` loader | |
 | `frontend/` | React web app ([frontend/README.md](frontend/README.md)) | all screens |
 | `Form_Scrapper_Extension/` | Chrome extension ([its README](Form_Scrapper_Extension/README.md)) | US-25 |
 | `docs/` | Backlog, requirements, sprint notes, [integration guide](docs/sprint-03-integration.md) | |
 
 Roles are Django groups on the default user model: `LEARNER`, `INSTRUCTOR` and `FORM_REVIEWER`. Each account needs exactly one.
+
+## Deployment
+
+**Live:** **https://practicemode-amber.vercel.app**
+
+The web app and the API are one Vercel project. Vercel serves the built React app from its CDN and runs Django as a Python function. The database is PostgreSQL on Neon, in the same region as the functions (US East).
+
+```mermaid
+flowchart LR
+    B["Browser<br/>practicemode-amber.vercel.app"]
+    X["Chrome extension"]
+
+    subgraph Vercel["Vercel project"]
+        direction TB
+        RW{"vercel.json<br/>rewrites"}
+        CDN["Static files<br/>frontend/dist"]
+        FN["Python function<br/>api/index.py → Django WSGI"]
+    end
+
+    PG[("Neon PostgreSQL<br/>pooled connection")]
+    AI["Gemini / Groq"]
+
+    B --> RW
+    X -- "/api/forms/extractions" --> RW
+    RW -- "/api/*, /admin/*" --> FN
+    RW -- "assets" --> CDN
+    RW -- "any other path → index.html" --> CDN
+    FN --> PG
+    FN -.-> AI
+```
+
+**Why there is no CORS:** the browser loads the page and calls `/api` on the same domain, so every request is same-origin. Session and CSRF cookies are first-party, `Secure`, `HttpOnly` (session) and `SameSite=Lax`. Django needs no CORS headers. The extension's service worker has host permissions, so CORS doesn't apply to it either. Its origin only needs to be in `DJANGO_CSRF_TRUSTED_ORIGINS`.
+
+| File | Purpose |
+| --- | --- |
+| `vercel.json` | Builds `frontend/` (`npm ci`, `npm run build`), serves `frontend/dist`, sends `/api/*` and `/admin/*` to Django and every other path to the web app. Python functions may run up to 300 seconds, so a batch of AI drafts can finish. |
+| `api/index.py` | Exposes Django's WSGI application to Vercel's Python runtime. Django still sees the original path, so `practicemode/urls.py` routes it as usual. |
+| `.vercelignore` | Keeps the extension, local databases, `.env` files and `node_modules` out of the upload. |
+| `.python-version` | Python 3.12 for the function. |
+
+Production environment variables (set in the Vercel project, never committed):
+
+| Variable | Value in production |
+| --- | --- |
+| `DATABASE_URL` | Set by the Neon integration (pooled connection) |
+| `DJANGO_SECRET_KEY` | A long random value |
+| `DJANGO_DEBUG` | `false` |
+| `DJANGO_ALLOWED_HOSTS` | `.vercel.app` |
+| `DJANGO_BEHIND_HTTPS_PROXY` | `true`: Vercel ends TLS at its edge. Without it, Django thinks requests are `http://` and refuses every POST from the `https://` page |
+| `GEMINI_API_KEY`, `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, `GROQ_API_KEY` | AI draft keys |
+
+**Updating the deployment** after a pull request is merged into `main`:
+
+```bash
+git checkout main && git pull
+npx vercel login                       # once, as the project owner
+npx vercel link --project practicemode # once per checkout
+npx vercel env pull .env.production.local --environment=production   # git-ignored
+
+# Only when the merge adds migrations: apply them to Neon (use the direct, unpooled URL)
+set -a; source .env.production.local; set +a
+DATABASE_URL="$DATABASE_URL_UNPOOLED" .venv/bin/python manage.py migrate
+
+npx vercel deploy --prod
+```
+
+Staff accounts on the live site are created the same way as locally, with `manage.py shell` against `DATABASE_URL_UNPOOLED`. Ask the project owner for the live reviewer and instructor sign-ins; they are not the local `change-me-123` passwords.
 
 ## Getting started
 
@@ -242,8 +541,8 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 ## Testing
 
 ```bash
-.venv/bin/python manage.py test                     # 291 backend tests
-(cd frontend && npm test)                           # 183 frontend tests (Vitest + Testing Library)
+.venv/bin/python manage.py test                     # 292 backend tests
+(cd frontend && npm test)                           # 185 frontend tests (Vitest + Testing Library)
 (cd Form_Scrapper_Extension && npx playwright install chromium && npm test)   # 28 unit + 29 end-to-end
 ```
 
@@ -273,17 +572,17 @@ Change a password with `.venv/bin/python manage.py changepassword reviewer`. Use
 
 ## Team
 
-| Member | Main contributions in Sprint 3 |
-| --- | --- |
-| Kashvi Prawal (Product Owner) | US-08 autosave on the frontend: save, resume, failure messages and their tests; frontend scaffold and API client |
-| Rohan Aditya Ram | Accounts (US-01), learner catalog (US-02) and practice attempts with validation feedback (US-08, US-11, US-26) |
-| Atheer Alajmi | Form categories and failure reason, pending-form metadata editing, `seed_demo` demo data |
-| Perumal Marimuthu | Reviewer workflow API: queue, notifications, decisions and import (US-04, US-10, US-16, US-17, US-25) |
-| Siddharth Jiyani | Browser extension and import (US-25), web app screens and UI, learner sign-in, reviewer corrections, integration |
+| Member | Main contributions in Sprint 3 | Sprint 4 pull requests |
+| --- | --- | --- |
+| Kashvi Prawal (Product Owner) | US-08 autosave on the frontend: save, resume, failure messages and their tests; frontend scaffold and API client | US-09 translated guidance (#17), US-22 progress filters (#23), form versions and deletion (#24), AI drafts of guidance (#25) |
+| Rohan Aditya Ram | Accounts (US-01), learner catalog (US-02) and practice attempts with validation feedback (US-08, US-11, US-26) | US-18 checklist (#18), accessibility polish (#19), Sprint 4 README (#20), instructor accounts and change requests (#21) |
+| Atheer Alajmi | Form categories and failure reason, pending-form metadata editing, `seed_demo` demo data | Learner progress refresh and retry (#22) |
+| Perumal Marimuthu | Reviewer workflow API: queue, notifications, decisions and import (US-04, US-10, US-16, US-17, US-25) | US-12 field hints (#16), US-05 instructor requests (#13), reviewer guidance editor (#14), US-15 form requests (#15), live link (#26) |
+| Siddharth Jiyani | Browser extension and import (US-25), web app screens and UI, learner sign-in, reviewer corrections, integration | US-03 assistance request (#9), learner accounts (#10), extension Apply entry (#11), AI drafting and rate limits (#12), Vercel deployment |
 
 ## Pull requests and reviews
 
-Every branch reached `main` through a pull request that a teammate reviewed. Listed in merge order.
+Every branch reached `main` through a pull request. **Sprint 3**, in merge order:
 
 | PR | Stories | Branch | Author | Reviewer |
 | --- | --- | --- | --- | --- |
@@ -293,6 +592,29 @@ Every branch reached `main` through a pull request that a teammate reviewed. Lis
 | [#6](https://github.com/Perumal100/PracticeMode/pull/6) Accounts, learner catalog and practice attempts | US-01, US-02, US-11, US-26 | `dev-rohan` | Rohan Aditya Ram | Siddharth Jiyani |
 | [#8](https://github.com/Perumal100/PracticeMode/pull/8) Browser extension that extracts forms and sends them for review | US-25 | `browser-extension` | Siddharth Jiyani | Perumal Marimuthu |
 | [#5](https://github.com/Perumal100/PracticeMode/pull/5) Post-integration: reviewer corrections, link and phone checks, practice insights | US-10, US-26 | `pr/post-integration` | Siddharth Jiyani | Kashvi Prawal |
+
+**Sprint 4**, in merge order:
+
+| PR | Stories | Branch | Author | Reviewer |
+| --- | --- | --- | --- | --- |
+| [#9](https://github.com/Perumal100/PracticeMode/pull/9) US-03: learners request a live assistance session | US-03 | `feature/us-03-assistance-request` | Siddharth Jiyani | Perumal Marimuthu |
+| [#16](https://github.com/Perumal100/PracticeMode/pull/16) US-12: contextual hints on practice form fields | US-12 | `perumal/us-12-field-hints` | Perumal Marimuthu | Siddharth Jiyani |
+| [#17](https://github.com/Perumal100/PracticeMode/pull/17) US-09: translated labels and guidance | US-09 | `feature/us-09-translated-guidance` | Kashvi Prawal | Siddharth Jiyani, Rohan Aditya Ram |
+| [#18](https://github.com/Perumal100/PracticeMode/pull/18) US-18: preparation checklist with fictional examples | US-18 | `feature/us-18-preparation-checklist` | Rohan Aditya Ram | Siddharth Jiyani |
+| [#10](https://github.com/Perumal100/PracticeMode/pull/10) Learner accounts with a password and practice history | US-01 (change) | `feature/learner-accounts` | Siddharth Jiyani | Perumal Marimuthu |
+| [#11](https://github.com/Perumal100/PracticeMode/pull/11) Open the form behind an "Apply" button before extracting | US-25 | `feature/extension-apply-entry` | Siddharth Jiyani | Perumal Marimuthu |
+| [#13](https://github.com/Perumal100/PracticeMode/pull/13) US-05: instructor requests | US-05 | `perumal/us-05-instructor-requests` | Perumal Marimuthu | Siddharth Jiyani |
+| [#14](https://github.com/Perumal100/PracticeMode/pull/14) Reviewer guidance editor | US-09, US-12, US-18 | `perumal/reviewer-guidance-editor` | Perumal Marimuthu | Atheer Alajmi |
+| [#19](https://github.com/Perumal100/PracticeMode/pull/19) Accessibility polish on Sprint 4 screens |  | `chore/sprint-4-polish-and-docs` | Rohan Aditya Ram | Siddharth Jiyani |
+| [#20](https://github.com/Perumal100/PracticeMode/pull/20) Sprint 4 stories, setup, demo script and API docs |  | `docs/sprint-4-readme` | Rohan Aditya Ram | Siddharth Jiyani |
+| [#23](https://github.com/Perumal100/PracticeMode/pull/23) US-22: instructors filter the progress of learners they help | US-22 | `feature/us-22-progress-filters` | Kashvi Prawal | — |
+| [#24](https://github.com/Perumal100/PracticeMode/pull/24) Form version history and form deletion |  | `feature/form-versions-and-deletion` | Kashvi Prawal | — |
+| [#25](https://github.com/Perumal100/PracticeMode/pull/25) AI drafts of hints and translations, approved by a Form Reviewer | US-09, US-12 | `feature/ai-guidance-drafts` | Kashvi Prawal | — |
+| [#12](https://github.com/Perumal100/PracticeMode/pull/12) AI drafting: separate buttons, progress bar, rate-limit handling | US-09, US-12 | `feature/ai-rate-limits` | Siddharth Jiyani | Rohan Aditya Ram |
+| [#21](https://github.com/Perumal100/PracticeMode/pull/21) Instructor accounts, meeting links, session history, change requests | US-05 | `feature/instructor-management` | Rohan Aditya Ram | Siddharth Jiyani |
+| [#22](https://github.com/Perumal100/PracticeMode/pull/22) Learner progress: refresh and retry actions | US-22 | `atheer/learner-progress-refresh` | Atheer Alajmi | Perumal Marimuthu, Rohan Aditya Ram |
+| [#15](https://github.com/Perumal100/PracticeMode/pull/15) US-15: learners request a form by link | US-15 | `perumal/us-15-form-requests` | Perumal Marimuthu | Kashvi Prawal, Rohan Aditya Ram |
+| [#26](https://github.com/Perumal100/PracticeMode/pull/26) Live deployment link |  | `perumal/docs-live-deployment` | Perumal Marimuthu | — |
 
 ## Reference
 
@@ -467,9 +789,6 @@ SQLite is used for local development; PostgreSQL remains the production target.
 Source availability currently uses a boolean rather than the three-state value
 described in Sprint 2. Categories are stored as a JSON list.
 
-Metadata editing currently supports title and categories only. Changes to
-extracted fields, source information, and lifecycle status are outside this endpoint.
-
 ### Data model
 
 `reviewer` owns the form tables: `PracticeForm` (with `categories` and `failure_reason`, migration `0002`), `FormField`, `ReviewDecision` and `ReviewNotification`. `attempts` owns the learner tables below. `attempts.0001_initial` depends only on `reviewer.0001_initial` and the user model.
@@ -497,18 +816,18 @@ Every setting is optional for local use. Put local values in a `.env` file at th
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | unset (SQLite `db.sqlite3`) | `postgresql://USER:PASSWORD@HOST:5432/DBNAME` for PostgreSQL |
+| `DATABASE_URL` | unset (SQLite `db.sqlite3`) | `postgresql://USER:PASSWORD@HOST:5432/DBNAME` for PostgreSQL. Query options such as `?sslmode=require` are passed to the driver |
 | `DJANGO_SECRET_KEY` | development key | Set a private value when hosting |
 | `DJANGO_DEBUG` | `true` | `false` when hosting; cookies then become Secure |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Comma separated |
 | `DJANGO_FORCE_HTTPS` | `false` | `true` redirects HTTP to HTTPS |
+| `DJANGO_BEHIND_HTTPS_PROXY` | `false` | `true` behind a proxy that ends TLS and sets `X-Forwarded-Proto` (Vercel). Needed for the CSRF origin check on HTTPS |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | empty | Add `chrome-extension://<extension-id>` so the extension can import forms |
 | `GEMINI_API_KEY` | unset | Google Gemini key for AI drafts of hints and translations (tried first) |
 | `GEMINI_API_KEY_1`, `GEMINI_API_KEY_2`, … | unset | More Gemini keys (from other accounts), tried in number order when one is over its limit |
 | `GROQ_API_KEY` (and `GROQ_API_KEY_1`, …) | unset | Groq key(s), used when every Gemini key fails |
 | `GEMINI_MODELS` / `GROQ_MODELS` | `gemini-2.5-flash,gemini-flash-lite-latest,gemini-3-flash-preview,gemini-3.1-flash-lite` / `openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b` | Models tried in order, comma-separated |
 | `AI_TIMEOUT_SECONDS` | `30` | How long one AI request may take before the next model is tried |
-| `AI_TIMEOUT_SECONDS` | `30` | How long to wait for each provider |
 
 Staff passwords are stored as bcrypt hashes, and session cookies are HttpOnly. SQLite runs in `IMMEDIATE` transaction mode so concurrent answer saves wait for each other instead of failing.
 

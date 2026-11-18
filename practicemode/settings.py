@@ -5,7 +5,7 @@ locally and is overridden when DATABASE_URL is supplied by deployment tooling.
 """
 from pathlib import Path
 import os
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 from .env import load_env_file
 
@@ -66,6 +66,11 @@ if DATABASE_URL:
         "PASSWORD": parsed.password,
         "HOST": parsed.hostname,
         "PORT": parsed.port or 5432,
+        # Hosted Postgres (Neon, Render) puts sslmode and similar in the query string.
+        "OPTIONS": dict(parse_qsl(parsed.query)),
+        # Poolers in transaction mode (Neon's -pooler host, PgBouncer) cannot keep
+        # a server-side cursor open between queries.
+        "DISABLE_SERVER_SIDE_CURSORS": True,
     }}
 else:
     # IMMEDIATE takes the write lock when a transaction starts. SQLite's default
@@ -90,6 +95,11 @@ SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = os.environ.get("DJANGO_FORCE_HTTPS", "false").lower() == "true"
+# Hosts such as Vercel end TLS at their proxy and forward plain HTTP. Without this,
+# Django thinks requests are http:// and the CSRF origin check rejects every POST
+# from the https:// page. Only enable it behind a proxy that sets this header.
+if os.environ.get("DJANGO_BEHIND_HTTPS_PROXY", "false").lower() == "true":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # The browser extension posts imports (API-15) from chrome-extension://<id>;
 # list that origin here so Django's CSRF origin check accepts it.
 CSRF_TRUSTED_ORIGINS = [origin for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if origin]

@@ -1,0 +1,12 @@
+.venv
+.git
+**/node_modules
+frontend/dist
+Form_Scrapper_Extension
+Project_documents
+db.sqlite3
+db.backup.sqlite3
+.env*
+**/__pycache__
+.pytest_cache
+htmlcov
